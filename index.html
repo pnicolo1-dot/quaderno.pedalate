@@ -42,6 +42,16 @@ nav.tabs a{font-family:var(--f-display);font-weight:600;font-size:16px;letter-sp
 nav.tabs a[aria-current="page"]{background:var(--accent);color:var(--on-accent)}
 nav.tabs a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 main{padding-block:20px 60px}
+.kinds{flex-wrap:nowrap;overflow-x:auto;max-width:100%}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}
+.gallery .ph{padding:0;border:none;border-radius:6px;overflow:hidden;aspect-ratio:1;background:var(--surface2)}
+.gallery img{width:100%;height:100%;object-fit:cover;display:block}
+.lightbox{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:calc(12px + env(safe-area-inset-top,0px)) 12px calc(12px + env(safe-area-inset-bottom,0px))}
+.lightbox img{max-width:100%;max-height:calc(100% - 70px);object-fit:contain;border-radius:6px}
+.lb-bar{display:flex;gap:10px;align-items:center;color:#fff;flex-wrap:wrap;justify-content:center}
+.lb-bar button{background:#2a2a2a;color:#fff;border-color:#444;min-width:44px}
+.cam{color:var(--accent)}
+
 .act .medals svg,.medals svg{width:18px;height:18px}
 .medals{display:inline-flex;align-items:center;gap:1px;margin-right:6px;vertical-align:-4px}.medals b{font-size:12px;color:var(--muted);margin-left:2px}
 .podium-sum{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.podium-sum>div{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--surface2);border-radius:8px;padding:10px 4px}.podium-sum .num{font-size:28px}.podium-sum small{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
@@ -172,7 +182,7 @@ const PZ_N = ['Z1 Recupero','Z2 Resistenza','Z3 Tempo','Z4 Soglia','Z5 VO2max','
 const SPORT_L = {ride:'Ciclismo', run:'Corsa', walk:'Camminata', other:'Altro'};
 const SUB_L = {mtb:'MTB', gravel:'Gravel', virtual:'Virtuale', road:'Strada', indoor:'Indoor'};
 const DAY = 86400000;
-const state = { medals:{}, rkCat:'dist', rkPeriod:'sempre', log:[], acts:[], examples:false, view:'riepilogo', sel:null, charts:{}, fitness:[], range:90, filter:'ride', q:'' };
+const state = { kind:(store('qp-kind')||'all'), medals:{}, rkCat:'dist', rkPeriod:'sempre', log:[], acts:[], examples:false, view:'riepilogo', sel:null, charts:{}, fitness:[], range:90, filter:'ride', q:'' };
 
 /* ====================== utilità ====================== */
 const $ = s => document.querySelector(s);
@@ -195,8 +205,12 @@ function store(k, v){ try{ if(v===undefined) return JSON.parse(localStorage.getI
 /* ====================== archivio locale (IndexedDB) ====================== */
 const DB = {
   db:null,
-  async open(){ try{ this.db = await new Promise((res,rej)=>{ const r=indexedDB.open('quaderno-pedalate',1); r.onupgradeneeded=()=>r.result.createObjectStore('acts',{keyPath:'id'}); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }catch(e){ this.db=null; } },
-  req(mode, fn){ return new Promise(res=>{ if(!this.db) return res(null); try{ const r=fn(this.db.transaction('acts',mode).objectStore('acts')); r.onsuccess=()=>res(r.result); r.onerror=()=>res(null); }catch(e){ res(null); } }); },
+  async open(){ try{ this.db = await new Promise((res,rej)=>{ const r=indexedDB.open('quaderno-pedalate',2); r.onupgradeneeded=()=>{ const d=r.result; if(!d.objectStoreNames.contains('acts')) d.createObjectStore('acts',{keyPath:'id'}); if(!d.objectStoreNames.contains('media')) d.createObjectStore('media',{keyPath:'id'}); }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }catch(e){ this.db=null; } },
+  req(mode, fn, st='acts'){ return new Promise(res=>{ if(!this.db) return res(null); try{ const r=fn(this.db.transaction(st,mode).objectStore(st)); r.onsuccess=()=>res(r.result); r.onerror=()=>res(null); }catch(e){ res(null); } }); },
+  mPut(m){ return this.req('readwrite', s=>s.put(m), 'media'); },
+  mGet(id){ return this.req('readonly', s=>s.get(id), 'media'); },
+  mDel(id){ return this.req('readwrite', s=>s.delete(id), 'media'); },
+  mClear(){ return this.req('readwrite', s=>s.clear(), 'media'); },
   all(){ return this.req('readonly', s=>s.getAll()).then(r=>r||[]); },
   put(a){ return this.req('readwrite', s=>s.put(a)); },
   del(id){ return this.req('readwrite', s=>s.delete(id)); },
@@ -205,10 +219,19 @@ const DB = {
 
 /* ====================== profilo atleta ====================== */
 const profile = Object.assign({weight:75, age:45, sex:'m', hrMax:null, ftp:null}, store('qp-profile')||{});
-const cycling = () => state.acts.filter(a=>a.sport==='ride');
+const SPIN_RE=/spin|cyclette|rulli|indoor|trainer|zwift|virtual/i;
+function kindOf(a){
+  if(a.sport==='ride'){ if(a.sub==='indoor'||a.sub==='virtual'||a.indoor||SPIN_RE.test(a.name||'')||!(a.track&&a.track.length>1)) return 'spin'; if(a.sub==='mtb'||a.sub==='gravel') return 'mtb'; return 'road'; }
+  if(a.sport==='other' && SPIN_RE.test(a.name||'')) return 'spin';
+  return 'other';
+}
+const KINDS=[['all','Tutte'],['road','Strada'],['mtb','MTB'],['spin','Spinning']];
+const allRides = () => state.acts.filter(a=>kindOf(a)!=='other');
+const cycling = () => allRides().filter(a=>state.kind==='all' || kindOf(a)===state.kind);
+function kindBar(){ return `<div class="seg kinds" role="group" aria-label="Tipo di uscita">${KINDS.map(([k,l])=>`<button data-kind="${k}" aria-pressed="${state.kind===k}">${l}</button>`).join('')}</div>`; }
 function hrMaxEff(){ if(profile.hrMax) return profile.hrMax; if(state.examples) return hrMaxEx; const yr=Date.now()-365*DAY; const m=Math.max(0,...state.acts.filter(a=>a.start>yr && a.maxHr).map(a=>a.maxHr)); return m>=140 && m<=215 ? m : Math.round(208-0.7*profile.age); }
-function bestPowerSince(w, since){ let b=null, id=null; for(const a of cycling()){ if(a.start<since || !a.best) continue; const i=WINDOWS.indexOf(w); const v=a.best[i]; if(v && (!b||v>b)){ b=v; id=a.id; } } return {w:b, id}; }
-function ftpEst(){ const b=bestPowerSince(1200, Date.now()-120*DAY).w; return b? Math.round(b*0.95) : null; }
+function bestPowerSince(w, since, all){ let b=null, id=null; for(const a of (all? allRides() : cycling())){ if(a.start<since || !a.best) continue; const i=WINDOWS.indexOf(w); const v=a.best[i]; if(v && (!b||v>b)){ b=v; id=a.id; } } return {w:b, id}; }
+function ftpEst(){ const b=bestPowerSince(1200, Date.now()-120*DAY, true).w; return b? Math.round(b*0.95) : null; }
 function ftpEff(){ return profile.ftp || ftpEst(); }
 const lthr = () => hrMaxEff()*0.89;
 function tss(a){
@@ -448,13 +471,14 @@ async function importFiles(files){
       const csvE=Object.values(zip.files).find(e=>/(^|\/)activities\.csv$/i.test(e.name));
       if(csvE){
         const rows=parseCSV(await csvE.async('string')); const hd=rows[0]||[];
-        const fi=hd.findIndex(h=>/file/i.test(h)); const ni=hd.findIndex((h,i)=>i!==fi && /(activity name|nome attivit|^name$|^nome$)/i.test(h.trim())); const ti=hd.findIndex(h=>/(activity type|tipo attivit|^type$|^tipo$)/i.test(h.trim()));
-        if(fi>=0) for(const r of rows.slice(1)){ const fn=(r[fi]||'').trim(); if(!fn) continue; const st=sportFromText(ti>=0? r[ti] : ''); meta[fn.toLowerCase()]={name: ni>=0? (r[ni]||'').trim()||null : null, sport:st.sport, sub:st.sub}; }
+        const fi=hd.findIndex(h=>/file/i.test(h)); const ni=hd.findIndex((h,i)=>i!==fi && /(activity name|nome attivit|^name$|^nome$)/i.test(h.trim())); const ti=hd.findIndex(h=>/(activity type|tipo attivit|^type$|^tipo$)/i.test(h.trim())); const mi=hd.findIndex(h=>/^(media|contenuti multimediali|multimedia)$/i.test(h.trim()));
+        if(fi>=0) for(const r of rows.slice(1)){ const fn=(r[fi]||'').trim(); if(!fn) continue; const st=sportFromText(ti>=0? r[ti] : ''); meta[fn.toLowerCase()]={name: ni>=0? (r[ni]||'').trim()||null : null, sport:st.sport, sub:st.sub, media: mi>=0? (r[mi]||'').split('|').map(x=>x.trim()).filter(Boolean) : []}; }
       }
       for(const e of Object.values(zip.files)){
         if(e.dir || !/\.(fit|gpx|tcx)(\.gz)?$/i.test(e.name)) continue;
         const m=meta[e.name.toLowerCase()] || meta[e.name.toLowerCase().replace(/^.*?(activities\/)/,'$1')] || {};
-        jobs.push({name:e.name, get:()=>e.async('arraybuffer'), meta:Object.assign({source:'Strava'}, m)});
+        const media=(m.media||[]).map(pth=>zip.file(pth)||zip.file(pth.replace(/^\/+/,''))).filter(Boolean); const mm=Object.assign({source:'Strava'}, m); delete mm.media;
+        jobs.push({name:e.name, get:()=>e.async('arraybuffer'), meta:mm, media});
       }
     } else if(/\.(fit|gpx|tcx)(\.gz)?$/i.test(n)) jobs.push({name:f.name, get:()=>f.arrayBuffer(), meta:{}});
     else say(`${f.name}: formato non riconosciuto (servono .fit, .gpx, .tcx o lo ZIP di Strava)`,'c-warn');
@@ -462,19 +486,19 @@ async function importFiles(files){
   if(!jobs.length){ renderAll(); return; }
   if(state.examples){ state.acts=[]; state.examples=false; }
   const have=new Set(state.acts.map(a=>Math.round(a.start/60000)));
-  let ok=0, dup=0, bad=0;
+  let ok=0, dup=0, bad=0, photos=0;
   for(let i=0;i<jobs.length;i++){
     const j=jobs[i];
     try{
       const a=await parseAny(j.name, await j.get(), j.meta);
       const key=Math.round(a.start/60000);
       if(have.has(key)||have.has(key-1)||have.has(key+1)){ dup++; }
-      else { have.add(key); state.acts.push(a); await DB.put(a); ok++; if(jobs.length<30) say(`✓ ${a.name} · ${nf(a.distance/1000,1)} km`,'c-good'); }
+      else { have.add(key); if(j.media && j.media.length){ for(const zf of j.media){ try{ const id=await savePhoto(a, await zf.async('blob')); if(id) photos++; }catch(e){} } } state.acts.push(a); await DB.put(a); ok++; if(jobs.length<30) say(`✓ ${a.name} · ${nf(a.distance/1000,1)} km`,'c-good'); }
     }catch(e){ bad++; say(`✗ ${j.name}: ${e.message}`,'c-bad'); }
     if(bar) bar.style.width=((i+1)/jobs.length*100)+'%';
     if(i%10===9) await new Promise(r=>setTimeout(r,0));
   }
-  say(`Fatto: ${ok} attività importate${dup? `, ${dup} già presenti` : ''}${bad? `, ${bad} non lette` : ''}.`, ok? 'c-good' : 'c-warn');
+  say(`Fatto: ${ok} attività importate${photos? ` con ${photos} foto` : ''}${dup? `, ${dup} già presenti` : ''}${bad? `, ${bad} non lette` : ''}.`, ok? 'c-good' : 'c-warn');
   state.acts.sort((a,b)=>b.start-a.start);
   recompute(); renderAll();
 }
@@ -512,13 +536,14 @@ function makeExamples(){
     const day=today-k*DAY, wd=(new Date(day).getDay()+6)%7, wk=Math.floor((84-k)/7), recovery=wk%4===3;
     let o=null;
     if(wd===1) o={km:28+rand()*6, climb:380, name:'Uscita veloce del martedì'};
+    else if(wd===2 && wk%2===0) o={km:24+rand()*4, climb:150, name:'Spinning del mercoledì', indoor:true};
     else if(wd===3 && !recovery) o={km:36+rand()*6, climb:620, name:'Salite del giovedì'};
     else if(wd===5) o={km:recovery? 30 : 42+rand()*14, climb:recovery? 600 : 1050+rand()*350, mtb:true, name:'MTB nei Peloritani'};
     else if(wd===6 && !recovery && rand()<0.7) o={km:30+rand()*10, climb:520, name:'Giro della domenica'};
     if(!o) continue;
     o.ftp=205; o.fit=0.9+wk*0.012;
     const startMs=day+(7+rand()*2)*3600000;
-    try{ out.push(processRecords(genRide(rand,startMs,o), {name:'Esempio · '+o.name, sport:'ride', sub:o.mtb?'mtb':'road', source:'Esempio', isExample:true})); }catch(e){}
+    try{ let recs=genRide(rand,startMs,o); if(o.indoor) recs=recs.map(r=>({t:r.t, hr:r.hr, pw:r.pw, cad:r.cad, dist:r.dist})); out.push(processRecords(recs, {name:'Esempio · '+o.name, sport:'ride', sub:o.indoor?'indoor':o.mtb?'mtb':'road', source:'Esempio', isExample:true})); }catch(e){}
   }
   return out.sort((a,b)=>b.start-a.start);
 }
@@ -548,7 +573,7 @@ function formState(tsb){
 /* ====================== consigli ====================== */
 function zonesSince(since){ const z=[0,0,0,0,0]; for(const a of state.acts){ if(a.start<since||!a.hrHist) continue; hrZoneSecs(a.hrHist).forEach((v,i)=>z[i]+=v); } return z; }
 function buildAdvice(){
-  const out=[], rides=cycling(), now=Date.now(); if(!rides.length || !state.fitness.length) return out;
+  const out=[], rides=allRides(), now=Date.now(); if(!rides.length || !state.fitness.length) return out;
   const F=state.fitness, L=F[F.length-1], W=F[Math.max(0,F.length-8)];
   const ramp=L.ctl-W.ctl, hm=hrMaxEff();
   const last=rides[0], daysOff=Math.floor((now-last.start)/DAY);
@@ -662,7 +687,7 @@ const CATS=[
   {k:'dist', l:'Uscita più lunga', short:'distanza', v:a=>a.distance/1000, f:v=>nf(v,1)+' km'},
   {k:'gain', l:'Più dislivello', short:'dislivello', v:a=>a.gain||null, f:v=>nf(v)+' m'},
   {k:'time', l:'Più tempo in sella', short:'tempo in sella', v:a=>a.moving||null, f:v=>fmtDur(v)},
-  {k:'spd', l:'Velocità media (oltre 20 km)', short:'velocità media', v:a=>a.distance>20000 && a.avgSpd ? a.avgSpd : null, f:v=>nf(v,1)+' km/h'},
+  {k:'spd', l:'Velocità media (oltre 20 km)', short:'velocità media', v:a=>a.distance>20000 && a.avgSpd && (state.kind==='spin' || kindOf(a)!=='spin') ? a.avgSpd : null, f:v=>nf(v,1)+' km/h'},
   {k:'climb', l:'Più dislivello per km (oltre 10 km)', short:'pendenza media', v:a=>a.distance>10000 && a.gain>200 ? a.gain/(a.distance/1000) : null, f:v=>nf(v,1)+' m/km'},
   {k:'alt', l:'Altitudine massima', short:'altitudine', v:a=>a.maxAlt, f:v=>nf(v)+' m'},
   {k:'p5', l:'Potenza migliore 5 secondi', short:'potenza 5″', v:pwBest(5), f:v=>v+' W'},
@@ -738,7 +763,7 @@ function renderClassifiche(){
   const tr=trophies(), won=tr.filter(t=>t.on).length;
   let g=0,s=0,b=0; for(const id in state.medals||{}) for(const m of state.medals[id]) if(m.scope==='sempre'){ if(m.rank===0) g++; else if(m.rank===1) s++; else b++; }
   const cats=CATS.filter(c=>ranking(c,0,1).length);
-  v.innerHTML=`${exampleBanner()}<div><h1>Classifiche</h1><p class="muted">Le tue uscite messe a confronto tra loro: medaglie ai primi tre posti e coppe per i traguardi raggiunti.</p></div>
+  v.innerHTML=`${exampleBanner()}${kindBar()}<div><h1>Classifiche</h1><p class="muted">Le tue uscite messe a confronto tra loro: medaglie ai primi tre posti e coppe per i traguardi raggiunti.</p></div>
   <div class="panel"><h3>Medagliere di sempre</h3><div class="podium-sum">
     <div>${medalSVG(0,34)}<span class="num">${g}</span><small>ori</small></div><div>${medalSVG(1,34)}<span class="num">${s}</span><small>argenti</small></div><div>${medalSVG(2,34)}<span class="num">${b}</span><small>bronzi</small></div><div>${cupSVG(true,34)}<span class="num">${won}/${tr.length}</span><small>coppe</small></div></div></div>
   <div class="panel"><div class="toolbar" style="justify-content:space-between"><h3>Classifica</h3>
@@ -748,9 +773,55 @@ function renderClassifiche(){
   <div class="panel"><h3>Bacheca delle coppe</h3><div class="cups">${tr.map(t=>`<div class="cup ${t.on?'on':''}">${cupSVG(t.on)}<div style="min-width:0"><b>${esc(t.l)}</b><small>${esc(t.d)}</small>${t.a?`<a data-open="${t.a.id}" class="small">${esc(fmtDay(t.a.start))} · ${esc(t.a.name)}</a>`:''}${t.prog!=null?`<span class="bar"><i style="width:${(t.prog*100).toFixed(0)}%"></i></span><small>${t.txt}</small>`:''}${!t.on&&t.prog==null?'<small>Ancora da conquistare</small>':''}</div></div>`).join('')}</div></div>`;
 }
 document.addEventListener('click',e=>{
+  const kb=e.target.closest('[data-kind]'); if(kb){ state.kind=kb.dataset.kind; store('qp-kind',state.kind); computeMedals(); renderAll(); return; }
   const p=e.target.closest('[data-rkp]'); if(p){ state.rkPeriod=p.dataset.rkp; renderClassifiche(); return; }
   const c=e.target.closest('[data-rkc]'); if(c){ state.rkCat=c.dataset.rkc; renderClassifiche(); }
 });
+
+function spinSVG(w,h,big){
+  const ic=`<g fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="40" cy="44" r="11"/><circle cx="40" cy="44" r="3"/><path d="M14 62h44M20 62l6-10M52 62l-6-10M26 52l4-20M30 32h-6M30 32l10 12M30 38l24-2 2-14M50 20h10M56 22l2 6"/><path d="M18 30h12" stroke-width="4"/></g>`;
+  if(!big) return `<svg viewBox="0 0 72 72" width="${w}" height="${h}" aria-label="Spinning" role="img">${ic}</svg>`;
+  return `<svg viewBox="0 0 600 400" class="map" role="img" aria-label="Allenamento indoor"><rect width="600" height="400" fill="var(--surface2)"/><g transform="translate(210 70) scale(2.5)">${ic}</g><text x="300" y="300" text-anchor="middle" fill="var(--fg)" font-size="24" font-weight="600">Allenamento indoor</text><text x="300" y="330" text-anchor="middle" fill="var(--muted)" font-size="16">Spinning o rulli: nessun percorso GPS</text></svg>`;
+}
+
+/* ====================== foto ====================== */
+async function shrinkImage(blob, max=1600){
+  const bmp=await createImageBitmap(blob);
+  const k=Math.min(1, max/Math.max(bmp.width,bmp.height)), w=Math.round(bmp.width*k), h=Math.round(bmp.height*k);
+  const c=document.createElement('canvas'); c.width=w; c.height=h; c.getContext('2d').drawImage(bmp,0,0,w,h); bmp.close&&bmp.close();
+  return await new Promise(res=>c.toBlob(res,'image/jpeg',0.82));
+}
+async function savePhoto(a, blob){
+  let b; try{ b=await shrinkImage(blob); }catch(e){ return null; }   // formati non leggibili (es. HEIC su Android) vengono saltati
+  if(!b) return null;
+  const id=a.id+'-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  await DB.mPut({id, actId:a.id, blob:b});
+  (a.photoIds=a.photoIds||[]).push(id);
+  return id;
+}
+const photoURLs=new Map();
+async function photoSrcs(a){
+  const out=[];
+  for(const id of a.photoIds||[]){ if(!photoURLs.has(id)){ const m=await DB.mGet(id); if(m&&m.blob) photoURLs.set(id, URL.createObjectURL(m.blob)); } if(photoURLs.has(id)) out.push({src:photoURLs.get(id), id}); }
+  for(const u of a.photoUrls||[]) out.push({src:u});
+  return out;
+}
+async function fillGallery(a){
+  const g=$('#gallery'); if(!g) return;
+  const ph=await photoSrcs(a); if(!ph.length) return;
+  g.innerHTML=ph.map((p,i)=>`<button class="ph" data-ph="${i}"><img src="${esc(p.src)}" alt="Foto ${i+1} dell'uscita" loading="lazy"></button>`).join('');
+  g.onclick=e=>{ const b=e.target.closest('[data-ph]'); if(b) openLightbox(ph, +b.dataset.ph, a); };
+}
+function openLightbox(ph, i, a){
+  const o=document.createElement('div'); o.className='lightbox'; o.setAttribute('role','dialog'); o.setAttribute('aria-label','Foto');
+  const draw=()=>{ o.innerHTML=`<img src="${esc(ph[i].src)}" alt="Foto ${i+1}"><div class="lb-bar"><button data-lb="prev" ${i?'':'disabled'}>‹</button><span>${i+1} / ${ph.length}</span><button data-lb="next" ${i<ph.length-1?'':'disabled'}>›</button>${ph[i].id?'<button data-lb="del" class="danger">Elimina</button>':''}<button data-lb="close">Chiudi</button></div>`; };
+  draw(); document.body.append(o);
+  let x0=null; o.addEventListener('touchstart',e=>{ x0=e.touches[0].clientX; },{passive:true});
+  o.addEventListener('touchend',e=>{ if(x0==null) return; const dx=e.changedTouches[0].clientX-x0; if(dx<-50&&i<ph.length-1){ i++; draw(); } else if(dx>50&&i>0){ i--; draw(); } x0=null; });
+  o.addEventListener('click',async e=>{ const b=e.target.closest('[data-lb]'); if(!b){ if(e.target===o) o.remove(); return; }
+    const k=b.dataset.lb; if(k==='close') o.remove(); else if(k==='prev'&&i>0){ i--; draw(); } else if(k==='next'&&i<ph.length-1){ i++; draw(); }
+    else if(k==='del'){ if(b.dataset.sure){ const id=ph[i].id; await DB.mDel(id); a.photoIds=(a.photoIds||[]).filter(x=>x!==id); await DB.put(a); o.remove(); fillGallery(a); if(!(a.photoIds.length||(a.photoUrls||[]).length)) renderDettaglio(); } else { b.dataset.sure='1'; b.textContent='Conferma'; } } });
+}
 
 /* ====================== viste ====================== */
 function exampleBanner(){ return state.examples ? `<div class="banner"><p><b>Stai guardando dati di esempio</b> (12 settimane di uscite simulate). Importa i tuoi file FIT/GPX/TCX o l'archivio di Strava per vedere le tue statistiche.</p><button class="primary" data-go="importa">Importa le mie attività</button></div>` : ''; }
@@ -764,14 +835,15 @@ function recRow(label, a, val){ return a? `<div class="l">${label}<br><a data-op
 
 function renderRiepilogo(){
   const v=$('#v-riepilogo');
+  if(state.acts.length && !cycling().length){ v.innerHTML=`${kindBar()}<div class="panel empty"><h2>Nessuna uscita di questo tipo</h2><p>Scegli un altro tipo qui sopra.</p></div>`; return; }
   if(!state.acts.length){ v.innerHTML=`<div class="panel empty"><h2>Nessuna attività</h2><p>Importa i tuoi file per iniziare.</p><p><button class="primary" data-go="importa">Importa attività</button></p></div>`; return; }
   const now=Date.now(), ws=weekStart(now), tw=weekAgg(ws, now+DAY), pw=weekAgg(ws-7*DAY, ws);
   const ys=new Date(new Date().getFullYear(),0,1).getTime(), yr=weekAgg(ys, now+DAY);
   const F=state.fitness, L=F[F.length-1]||{ctl:0,atl:0,tsb:0}, fsx=formState(L.tsb);
   const adv=buildAdvice().slice(0,4), rec=records();
-  const last=state.acts[0];
+  const last=cycling()[0]||state.acts[0];
   v.innerHTML=`${exampleBanner()}${backupReminder()}
-  <div><h1>Ciao! Ecco come stai andando</h1><p class="muted">${cycling().length} uscite in bici · ultima ${esc(fmtDate(last.start))}</p></div>
+  <div class="toolbar" style="justify-content:space-between"><div><h1>Ciao! Ecco come stai andando</h1><p class="muted">${cycling().length} uscite${state.kind==='all'?'':' ('+KINDS.find(k=>k[0]===state.kind)[1]+')'} · ultima ${esc(fmtDate(last.start))}</p></div>${kindBar()}</div>
   <div class="grid2">
     <div class="panel"><h3>Questa settimana</h3>
       <div class="stats">
@@ -817,19 +889,19 @@ function renderRiepilogo(){
 }
 function advHTML(a){ return `<div class="adv c-${a.c}"><span class="dot"></span><div><b style="color:var(--fg)">${esc(a.t)}</b><p>${esc(a.p)}</p></div></div>`; }
 function actCard(a){
-  return `<button class="act" data-open="${a.id}">${routeSVG(a.track,70,56,true)}<div style="min-width:0">
-    <div class="t">${medalsRow(a)}${esc(a.name)}${a.isExample?'<span class="tag ex">esempio</span>':''}${a.sub&&SUB_L[a.sub]?`<span class="tag">${SUB_L[a.sub]}</span>`:''}${a.sport!=='ride'?`<span class="tag">${SPORT_L[a.sport]}</span>`:''}</div>
-    <div class="m">${esc(fmtDate(a.start))} · ${fmtTime(a.start)}</div>
+  return `<button class="act" data-open="${a.id}">${kindOf(a)==='spin'? spinSVG(70,56) : routeSVG(a.track,70,56,true)}<div style="min-width:0">
+    <div class="t">${medalsRow(a)}${esc(a.name)}${a.isExample?'<span class="tag ex">esempio</span>':''}${kindOf(a)==='spin'?'<span class="tag">Spinning</span>':a.sub&&SUB_L[a.sub]?`<span class="tag">${SUB_L[a.sub]}</span>`:''}${a.sport!=='ride'&&kindOf(a)!=='spin'?`<span class="tag">${SPORT_L[a.sport]}</span>`:''}</div>
+    <div class="m">${esc(fmtDate(a.start))} · ${fmtTime(a.start)}${((a.photoIds||[]).length+(a.photoUrls||[]).length)?` · <span class="cam">${(a.photoIds||[]).length+(a.photoUrls||[]).length} foto</span>`:''}</div>
     <div class="k"><span>${nf(a.distance/1000,1)}<small>km</small></span><span>${nf(a.gain)}<small>m D+</small></span><span>${fmtDur(a.moving)}</span>${a.avgPw?`<span>${nf(a.avgPw)}<small>W</small></span>`:''}${a.avgHr?`<span>${nf(a.avgHr)}<small>bpm</small></span>`:''}</div></div></button>`;
 }
 function renderAttivita(){
   const v=$('#v-attivita');
   const q=state.q.toLowerCase();
-  const list=state.acts.filter(a=>(state.filter==='all'||a.sport===state.filter) && (!q || a.name.toLowerCase().includes(q)));
+  const list=(state.filter==='all'? state.acts.filter(a=>state.kind==='all'||kindOf(a)===state.kind) : cycling()).filter(a=>!q || a.name.toLowerCase().includes(q));
   const months=new Map(); for(const a of list){ const k=new Date(a.start).toLocaleDateString('it-IT',{month:'long',year:'numeric'}); if(!months.has(k)) months.set(k,[]); months.get(k).push(a); }
   v.innerHTML=`${exampleBanner()}<div class="toolbar" style="justify-content:space-between"><h1>Attività</h1>
     <div class="toolbar"><input type="search" id="q" placeholder="Cerca per nome" value="${esc(state.q)}" aria-label="Cerca">
-    <select id="flt" aria-label="Sport"><option value="ride"${state.filter==='ride'?' selected':''}>Solo ciclismo</option><option value="all"${state.filter==='all'?' selected':''}>Tutti gli sport</option></select></div></div>
+    <select id="flt" aria-label="Sport"><option value="ride"${state.filter==='ride'?' selected':''}>Solo bici</option><option value="all"${state.filter==='all'?' selected':''}>Anche altri sport</option></select></div></div>${kindBar()}
     ${list.length? [...months].map(([m,arr])=>{ const km=arr.reduce((s,a)=>s+a.distance,0)/1000, g=arr.reduce((s,a)=>s+a.gain,0); return `<div class="list"><h3>${esc(m)} · <span class="num">${nf(km)} km · ${nf(g)} m</span></h3>${arr.map(actCard).join('')}</div>`; }).join('') : '<div class="panel empty">Nessuna attività trovata.</div>'}`;
 }
 function zonesHTML(z, names, colorVar){ const tot=z.reduce((a,b)=>a+b,0)||1; return `<div class="zones">${z.map((s,i)=>`<div class="zone"><span>${names[i]}</span><span class="b"><i style="width:${(s/tot*100).toFixed(1)}%;background:var(${colorVar});opacity:${0.35+0.65*(i+1)/z.length}"></i></span><span class="v">${nf(s/tot*100)}% · ${s>=3600?fmtHM(s):Math.round(s/60)+'m'}</span></div>`).join('')}</div>`; }
@@ -855,7 +927,7 @@ function renderDettaglio(){
   <div><p class="muted">${esc(fmtDate(a.start))} alle ${fmtTime(a.start)} · ${esc(a.source||'')}${a.sub&&SUB_L[a.sub]?' · '+SUB_L[a.sub]:''}</p><h1>${esc(a.name)}${a.isExample?'<span class="tag ex">esempio</span>':''}</h1></div>
   ${(state.medals[a.id]||[]).length?`<div class="panel"><h3>Risultati</h3><div class="achv">${state.medals[a.id].map(m=>`<div>${medalSVG(m.rank,30)}<span><b>${m.rank+1}° ${m.scope==='sempre'?'di sempre':'del '+m.scope}</b><small>${esc(m.c.l)} · ${m.c.f(m.c.v(a))}</small></span></div>`).join('')}</div></div>`:''}
   <div class="grid2">
-    <div class="panel">${!EMBEDDED && a.track && a.track.length>1 ? `<div id="lmap" class="lmap" role="region" aria-label="Mappa del percorso"></div>` : routeSVG(a.track,600,400,false)}</div>
+    <div class="panel">${kindOf(a)==='spin' && !(a.track&&a.track.length>1) ? spinSVG(600,400,true) : !EMBEDDED && a.track && a.track.length>1 ? `<div id="lmap" class="lmap" role="region" aria-label="Mappa del percorso"></div>` : routeSVG(a.track,600,400,false)}</div>
     <div class="panel"><div class="stats">
       ${S('Distanza',nf(a.distance/1000,2),'km')}${S('Dislivello positivo',nf(a.gain),'m')}
       ${S('Tempo in movimento',fmtDur(a.moving))}${S('Tempo trascorso',fmtDur(a.elapsed))}
@@ -875,6 +947,8 @@ function renderDettaglio(){
     ${has('pw')?'<div class="chart short"><canvas id="ch-pw"></canvas></div>':''}
     ${has('cad')?'<div class="chart short"><canvas id="ch-cad"></canvas></div>':''}
   </div>
+  <div class="panel"><div class="toolbar" style="justify-content:space-between"><h3>Foto</h3><label class="btn" for="ph-add">Aggiungi foto</label><input type="file" id="ph-add" accept="image/*" multiple hidden></div>
+    <div class="gallery" id="gallery">${(a.photoIds||[]).length||(a.photoUrls||[]).length? '' : '<p class="small muted">Nessuna foto. Puoi aggiungerle dalla galleria del telefono: restano salvate solo nell\'app.</p>'}</div></div>
   <div class="grid2">
     <div class="panel"><h3>Cosa ci dice questa uscita</h3><div class="advice">${actInsights(a).map(advHTML).join('')}</div></div>
     <div class="panel">${hz?`<h3>Zone di battito</h3>${zonesHTML(hz,HRZ_N,'--hr')}<p class="small muted">Calcolate su FC max ${hrMaxEff()} bpm.</p>`:''}${pz?`<h3>Zone di potenza</h3>${zonesHTML(pz,PZ_N,'--pw')}<p class="small muted">Calcolate su FTP ${ftp} W.</p>`:''}${!hz&&!pz?'<p class="muted">Nessun dato di battito o potenza in questo file.</p>':''}</div>
@@ -893,9 +967,11 @@ function renderDettaglio(){
       {label:'Questa uscita', data:WINDOWS.map((w,i)=>({x:w,y:a.best[i]})).filter(p=>p.y), borderColor:css('--pw'), backgroundColor:alpha(css('--pw'),.15), fill:true, pointRadius:3, pointBackgroundColor:css('--pw')}]},
       options:baseOpts({scales:axes({type:'logarithmic', min:5, max:7200, afterBuildTicks:ax=>{ax.ticks=WINDOWS.map(v=>({value:v}));}, ticks:{color:css('--muted'), callback:v=>durLabel(v), autoSkip:false}},{ticks:{color:css('--muted'), callback:v=>v+' W'}}), plugins:{legend:{display:false}, tooltip:{callbacks:{title:it=>durLabel(it[0].parsed.x), label:it=>it.dataset.label+': '+it.parsed.y+' W'}}}})}); }
   if($('#lmap')) initMap(a);
+  fillGallery(a);
+  $('#ph-add').onchange=async e=>{ const fs=[...e.target.files]; e.target.value=''; for(const f of fs){ try{ await savePhoto(a,f); }catch(err){} } await DB.put(a); fillGallery(a); };
   $('#del').onclick=()=>{ $('#delc').hidden=false; $('#del').hidden=true; };
   $('#del-no').onclick=()=>{ $('#delc').hidden=true; $('#del').hidden=false; };
-  $('#del-yes').onclick=async()=>{ state.acts=state.acts.filter(x=>x.id!==a.id); await DB.del(a.id); recompute(); go('attivita'); };
+  $('#del-yes').onclick=async()=>{ for(const pid of a.photoIds||[]) await DB.mDel(pid); state.acts=state.acts.filter(x=>x.id!==a.id); await DB.del(a.id); recompute(); go('attivita'); };
 }
 function renderForma(){
   const v=$('#v-forma');
@@ -981,7 +1057,7 @@ function renderImporta(){
   drop.addEventListener('drop',e=>{ e.preventDefault(); drop.classList.remove('over'); importFiles([...e.dataTransfer.files]); });
   for(const k of ['weight','age','sex','hrMax','ftp']){ $('#p-'+k).onchange=e=>{ const x=e.target.value; profile[k]= k==='sex'? x : (x===''? null : +x); if(k==='weight'&&!profile.weight) profile.weight=75; if(k==='age'&&!profile.age) profile.age=45; store('qp-profile',profile); recompute(); $('#p-saved').textContent='Profilo salvato. Statistiche aggiornate.'; }; }
   bindStrava(); bindBackup();
-  const w=$('#wipe'); if(w){ w.onclick=()=>{ $('#wipec').hidden=false; w.hidden=true; }; $('#wipe-no').onclick=()=>{ $('#wipec').hidden=true; w.hidden=false; }; $('#wipe-yes').onclick=async()=>{ await DB.clear(); state.acts=makeExamples(); state.examples=true; recompute(); go('riepilogo'); }; }
+  const w=$('#wipe'); if(w){ w.onclick=()=>{ $('#wipec').hidden=false; w.hidden=true; }; $('#wipe-no').onclick=()=>{ $('#wipec').hidden=true; w.hidden=false; }; $('#wipe-yes').onclick=async()=>{ await DB.clear(); await DB.mClear(); state.acts=makeExamples(); state.examples=true; recompute(); go('riepilogo'); }; }
 }
 
 /* ====================== installazione sul telefono ====================== */
@@ -1108,12 +1184,12 @@ function stravaSport(t){
   return {sport:'other'};
 }
 function summaryAct(it){
-  const st=stravaSport(it.type);
+  const st=it.trainer? {sport:'ride', sub:'indoor'} : stravaSport(it.type);
   return {id:'a'+Math.round(it.start/1000), name:it.name||'Attività', sport:st.sport, sub:st.sub||null, source:'Strava', start:it.start, distance:it.distance||0, moving:it.moving||it.elapsed||0, elapsed:it.elapsed||0, gain:it.gain||0, maxAlt:it.maxAlt??null, minAlt:null, avgSpd:it.moving? (it.distance||0)/it.moving*3.6 : 0, maxSpd:(it.maxSpd||0)*3.6, avgHr:it.avgHr||null, maxHr:it.maxHr||null, avgPw:it.avgPw||null, prof:{d:[],alt:[],spd:[],hr:[],pw:[],cad:[]}, track:[], stravaId:it.id};
 }
 async function stravaFetchOne(it){
   const s=await sGet(`/activities/${it.id}/streams`, {keys:'time,latlng,altitude,heartrate,watts,cadence,distance,velocity_smooth', key_by_type:'true'});
-  const st=stravaSport(it.type);
+  const st=it.trainer? {sport:'ride', sub:'indoor'} : stravaSport(it.type);
   if(s && s.time && s.time.data && s.time.data.length>=10){
     const T=s.time.data, g=k=>s[k] && s[k].data, LL=g('latlng'), AL=g('altitude'), HR=g('heartrate'), PW=g('watts'), CA=g('cadence'), DI=g('distance'), VS=g('velocity_smooth');
     const t0=it.start/1000, recs=[];
@@ -1144,7 +1220,7 @@ async function stravaSync(mode){
         for(const x of list){
           const start=Date.parse(x.start_date), key=Math.round(start/60000);
           if(have.has(key)||have.has(key-1)||have.has(key+1)||queued.has(x.id)) continue;
-          STRAVA.queue.push({id:x.id, name:x.name, type:x.sport_type||x.type, start, distance:x.distance, moving:x.moving_time, elapsed:x.elapsed_time, gain:x.total_elevation_gain, maxSpd:x.max_speed, avgHr:x.average_heartrate, maxHr:x.max_heartrate, avgPw:x.device_watts? x.average_watts : null, maxAlt:x.elev_high, manual:!!x.manual});
+          STRAVA.queue.push({id:x.id, name:x.name, type:x.sport_type||x.type, start, distance:x.distance, moving:x.moving_time, elapsed:x.elapsed_time, gain:x.total_elevation_gain, maxSpd:x.max_speed, avgHr:x.average_heartrate, maxHr:x.max_heartrate, avgPw:x.device_watts? x.average_watts : null, maxAlt:x.elev_high, manual:!!x.manual, trainer:!!x.trainer, photos:x.total_photo_count||0});
           queued.add(x.id); found++;
         }
         if(list.length<200) break; page++;
@@ -1157,6 +1233,7 @@ async function stravaSync(mode){
     while(STRAVA.queue.length && !state.stopSync){
       const it=STRAVA.queue[0];
       const a = it.manual ? summaryAct(it) : await stravaFetchOne(it);
+      if(it.photos>0){ try{ const ph=await sGet(`/activities/${it.id}/photos`, {size:'1024', photo_sources:'true'}); a.photoUrls=(ph||[]).map(x=>x.urls && (x.urls['1024']||Object.values(x.urls).pop())).filter(Boolean); }catch(e){ if(e instanceof RateLimit) throw e; } }
       if(!state.acts.some(x=>x.id===a.id)){ state.acts.push(a); await DB.put(a); }
       STRAVA.queue.shift(); saveStrava(); done++;
       setSync(`Scaricate ${done} attività · ne restano ${STRAVA.queue.length}`);
@@ -1259,7 +1336,7 @@ try{ const mq=matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('c
 })();
 </script>
 <script>
-window.APP_VERSION='202611091923';
+window.APP_VERSION='202611091955';
 if('serviceWorker' in navigator && location.protocol==='https:'){
   const had=!!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js?v='+APP_VERSION).then(reg=>{
