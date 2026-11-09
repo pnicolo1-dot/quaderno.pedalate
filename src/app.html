@@ -32,6 +32,8 @@ nav.tabs a{font-family:var(--f-display);font-weight:600;font-size:16px;letter-sp
 nav.tabs a[aria-current="page"]{background:var(--accent);color:var(--on-accent)}
 nav.tabs a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 main{padding-block:20px 60px}
+.c-muted{color:var(--muted)}
+table.splits th,table.splits td{text-align:right}table.splits td.best{color:var(--accent);font-weight:700}
 .friend{display:flex;gap:12px;align-items:center;background:var(--surface2);border-radius:8px;padding:8px 10px}
 ol.rank .grow{display:grid;grid-template-columns:34px 34px 1fr auto;gap:10px;align-items:center;background:var(--surface2);border-radius:8px;padding:8px 10px;border:1px solid transparent}ol.rank .grow.me-row{border-color:var(--accent)}ol.rank .grow .who{min-width:0;display:flex;flex-direction:column}ol.rank .grow .who b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}ol.rank .grow .who small{color:var(--muted);font-size:12px}
 .tablewrap{overflow-x:auto;max-width:100%}table.gt{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:14px}table.gt th,table.gt td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;vertical-align:top}table.gt tbody th{text-align:left;color:var(--muted);font-weight:500}table.gt thead th{vertical-align:bottom}table.gt thead th span{display:block;font-size:12px;margin-top:3px}table.gt thead th .avatar{display:inline-flex}table.gt td small{display:block;font-size:11px;color:var(--muted)}table.gt td.best{color:var(--accent);font-weight:700}
@@ -221,7 +223,8 @@ const DB = {
 const profile = Object.assign({first:'', last:'', photo:null, weight:75, age:45, sex:'m', hrMax:null, ftp:null}, store('qp-profile')||{});
 const SPIN_RE=/spin|cyclette|rulli|indoor|trainer|zwift|virtual/i;
 function kindOf(a){
-  if(a.sport==='ride'){ if(a.sub==='indoor'||a.sub==='virtual'||a.indoor||SPIN_RE.test(a.name||'')||!(a.track&&a.track.length>1)) return 'spin'; return 'bike'; }
+  if(a.sport==='ride'){ const summaryOnly=a.stravaId && !(a.prof&&a.prof.d&&a.prof.d.length>1);
+    if(a.sub==='indoor'||a.sub==='virtual'||a.indoor||a.trainer||SPIN_RE.test(a.name||'')||(!summaryOnly && !(a.track&&a.track.length>1))) return 'spin'; return 'bike'; }
   if(a.sport==='other' && SPIN_RE.test(a.name||'')) return 'spin';
   return 'other';
 }
@@ -409,13 +412,13 @@ function processRecords(raw, meta){
     const e1=ef(0,half), e2=ef(half,P.length); if(e1&&e2) A.decoupling=(e1-e2)/e1*100;
   }
   // profilo ridotto per i grafici
-  const B=Math.min(500,n), prof={d:[],alt:[],spd:[],hr:[],pw:[],cad:[]};
+  const B=Math.min(500,n), prof={d:[],t:[],alt:[],spd:[],hr:[],pw:[],cad:[]}, T0=R[0].t;
   for(let b=0;b<B;b++){
     const i0=Math.floor(b*n/B), i1=Math.max(i0+1,Math.floor((b+1)*n/B));
-    let sd=0, sa=0, ca=0, ss=0, sh=0, ch=0, sp=0, cp=0, sc=0, cc=0;
-    for(let i=i0;i<i1;i++){ const r=R[i]; sd+=r.dist; ss+=vs[i]; if(sm[i]!=null){ sa+=sm[i]; ca++; } if(r.hr>0){ sh+=r.hr; ch++; } if(r.pw!=null){ sp+=r.pw; cp++; } if(r.cad>0){ sc+=r.cad; cc++; } }
+    let sd=0, st=0, sa=0, ca=0, ss=0, sh=0, ch=0, sp=0, cp=0, sc=0, cc=0;
+    for(let i=i0;i<i1;i++){ const r=R[i]; sd+=r.dist; st+=r.t-T0; ss+=vs[i]; if(sm[i]!=null){ sa+=sm[i]; ca++; } if(r.hr>0){ sh+=r.hr; ch++; } if(r.pw!=null){ sp+=r.pw; cp++; } if(r.cad>0){ sc+=r.cad; cc++; } }
     const m=i1-i0;
-    prof.d.push(+(sd/m/1000).toFixed(3)); prof.spd.push(+(ss/m*3.6).toFixed(1));
+    prof.d.push(+(sd/m/1000).toFixed(3)); prof.t.push(Math.round(st/m)); prof.spd.push(+(ss/m*3.6).toFixed(1));
     prof.alt.push(ca? +(sa/ca).toFixed(1) : null); prof.hr.push(ch? Math.round(sh/ch) : null);
     prof.pw.push(hasPw && cp? Math.round(sp/cp) : null); prof.cad.push(cc? Math.round(sc/cc) : null);
   }
@@ -823,6 +826,34 @@ function openLightbox(ph, i, a){
     else if(k==='del'){ if(b.dataset.sure){ const id=ph[i].id; await DB.mDel(id); a.photoIds=(a.photoIds||[]).filter(x=>x!==id); await DB.put(a); o.remove(); fillGallery(a); if(!(a.photoIds.length||(a.photoUrls||[]).length)) renderDettaglio(); } else { b.dataset.sure='1'; b.textContent='Conferma'; } } });
 }
 
+function dataPanel(a){
+  const hasProf=a.prof&&a.prof.d&&a.prof.d.length>1;
+  const ch=(on,l)=>`<span class="chip ${on?'c-good':'c-muted'}">${on?'✓':'✗'} ${l}</span>`;
+  const items=[[a.track&&a.track.length>1,'GPS'],[!!a.avgHr,'Battito'],[!!a.avgCad,'Cadenza'],[!!a.avgPw,'Potenza'],[a.maxAlt!=null,'Altitudine']];
+  const missing=items.filter(x=>!x[0]).map(x=>x[1].toLowerCase());
+  let why='';
+  if(a.importNote) why=a.importNote;
+  else if(!hasProf && a.stravaId) why='Di questa uscita ho solo il riepilogo di Strava, senza i dati registrati secondo per secondo.';
+  else if(missing.length && missing.length<items.length) why=`Il file registrato non contiene: ${missing.join(', ')}. Di solito significa che durante l'uscita il sensore (fascia cardio, sensore di cadenza o misuratore di potenza) non era collegato.`;
+  const canRepair=a.stravaId && !hasProf && !EMBEDDED && STRAVA.refresh;
+  return `<div class="panel"><h3>Dati registrati</h3><div class="toolbar">${items.map(x=>ch(x[0],x[1])).join('')}</div>${why?`<p class="small muted">${esc(why)}</p>`:''}${canRepair?'<p><button class="primary" id="repair">Scarica i dettagli da Strava</button></p>':''}</div>`;
+}
+function splitsHTML(a){
+  const P=a.prof; if(!P||!P.t||P.t.length<2||kindOf(a)==='spin') return '';
+  const totKm=P.d[P.d.length-1]; if(totKm<1.5) return '';
+  const at=(km,arr)=>{ let i=1; while(i<P.d.length-1 && P.d[i]<km) i++; const d0=P.d[i-1], d1=P.d[i]; const f=d1>d0? (km-d0)/(d1-d0) : 0; return arr[i-1]+(arr[i]-arr[i-1])*Math.max(0,Math.min(1,f)); };
+  const rows=[]; let prevT=0, prevKm=0;
+  for(let k=1; k<=Math.ceil(totKm); k++){
+    const km=Math.min(k,totKm), t=at(km,P.t), dt=t-prevT, dk=km-prevKm; if(dk<0.2) break;
+    let up=0, hr=0, hn=0, prevA=null;
+    for(let i=0;i<P.d.length;i++){ if(P.d[i]<prevKm||P.d[i]>km) continue; const al=P.alt[i]; if(al!=null){ if(prevA!=null&&al>prevA) up+=al-prevA; prevA=al; } if(P.hr[i]){ hr+=P.hr[i]; hn++; } }
+    rows.push({k:km, dk, dt, v:dt>0? dk/dt*3600 : 0, up, hr:hn? hr/hn : null}); prevT=t; prevKm=km;
+  }
+  const best=Math.max(...rows.filter(r=>r.dk>=0.9).map(r=>r.v));
+  const body=rows.map(r=>`<tr><td>${nf(r.k,r.k%1?1:0)}</td><td>${fmtDur(r.dt)}</td><td class="${r.v===best?'best':''}">${nf(r.v,1)}</td><td>${nf(r.up)}</td><td>${r.hr?nf(r.hr):'–'}</td></tr>`).join('');
+  return `<div class="panel"><details ${rows.length<=25?'open':''}><summary><h3 style="display:inline">Parziali per km</h3> <span class="small muted">${rows.length} km · più veloce ${nf(best,1)} km/h</span></summary><div class="tablewrap"><table class="gt splits"><thead><tr><th>km</th><th>Tempo</th><th>km/h</th><th>D+ m</th><th>FC</th></tr></thead><tbody>${body}</tbody></table></div></details></div>`;
+}
+
 /* ====================== viste ====================== */
 function exampleBanner(){ return state.examples ? `<div class="banner"><p><b>Stai guardando dati di esempio</b> (12 settimane di uscite simulate). Importa i tuoi file FIT/GPX/TCX o l'archivio di Strava per vedere le tue statistiche.</p><button class="primary" data-go="importa">Importa le mie attività</button></div>` : ''; }
 function weekAgg(from, to){ const r=cycling().filter(a=>a.start>=from && a.start<to); return {n:r.length, km:r.reduce((s,a)=>s+a.distance,0)/1000, gain:r.reduce((s,a)=>s+a.gain,0), time:r.reduce((s,a)=>s+a.moving,0)}; }
@@ -950,6 +981,8 @@ function renderDettaglio(){
     ${has('pw')?'<div class="chart short"><canvas id="ch-pw"></canvas></div>':''}
     ${has('cad')?'<div class="chart short"><canvas id="ch-cad"></canvas></div>':''}
   </div>
+  ${dataPanel(a)}
+  ${splitsHTML(a)}
   ${(()=>{ const g=groupRides().find(x=>x.a.id===a.id); return g? `<div class="panel"><h3>Con i tuoi amici</h3>${groupTable(a,g.with)}</div>` : ''; })()}
   <div class="panel"><div class="toolbar" style="justify-content:space-between"><h3>Foto</h3><label class="btn" for="ph-add">Aggiungi foto</label><input type="file" id="ph-add" accept="image/*" multiple hidden></div>
     <div class="gallery" id="gallery">${(a.photoIds||[]).length||(a.photoUrls||[]).length? '' : '<p class="small muted">Nessuna foto. Puoi aggiungerle dalla galleria del telefono: restano salvate solo nell\'app.</p>'}</div></div>
@@ -972,6 +1005,7 @@ function renderDettaglio(){
       options:baseOpts({scales:axes({type:'logarithmic', min:5, max:7200, afterBuildTicks:ax=>{ax.ticks=WINDOWS.map(v=>({value:v}));}, ticks:{color:css('--muted'), callback:v=>durLabel(v), autoSkip:false}},{ticks:{color:css('--muted'), callback:v=>v+' W'}}), plugins:{legend:{display:false}, tooltip:{callbacks:{title:it=>durLabel(it[0].parsed.x), label:it=>it.dataset.label+': '+it.parsed.y+' W'}}}})}); }
   if($('#lmap')) initMap(a);
   fillGallery(a);
+  const rb=$('#repair'); if(rb) rb.onclick=async()=>{ rb.disabled=true; rb.textContent='Scarico…'; STRAVA.queue.unshift({id:a.stravaId, name:a.name, type:a.stype||(a.sub==='mtb'?'MountainBikeRide':'Ride'), start:a.start, distance:a.distance, moving:a.moving, elapsed:a.elapsed, gain:a.gain, trainer:!!a.trainer || a.sub==='indoor', repair:a.id}); delete a.repairTried; saveStrava(); await stravaSync('resume'); state.sel=(state.acts.find(x=>x.stravaId===a.stravaId)||a).id; show('dettaglio'); };
   $('#ph-add').onchange=async e=>{ const fs=[...e.target.files]; e.target.value=''; for(const f of fs){ try{ await savePhoto(a,f); }catch(err){} } await DB.put(a); fillGallery(a); };
   $('#del').onclick=()=>{ $('#delc').hidden=false; $('#del').hidden=true; };
   $('#del-no').onclick=()=>{ $('#delc').hidden=true; $('#del').hidden=false; };
@@ -1184,7 +1218,7 @@ function stravaSport(t){
 }
 function summaryAct(it){
   const st=it.trainer? {sport:'ride', sub:'indoor'} : stravaSport(it.type);
-  return {id:'a'+Math.round(it.start/1000), name:it.name||'Attività', sport:st.sport, sub:st.sub||null, source:'Strava', start:it.start, distance:it.distance||0, moving:it.moving||it.elapsed||0, elapsed:it.elapsed||0, gain:it.gain||0, maxAlt:it.maxAlt??null, minAlt:null, avgSpd:it.moving? (it.distance||0)/it.moving*3.6 : 0, maxSpd:(it.maxSpd||0)*3.6, avgHr:it.avgHr||null, maxHr:it.maxHr||null, avgPw:it.avgPw||null, prof:{d:[],alt:[],spd:[],hr:[],pw:[],cad:[]}, track:[], stravaId:it.id};
+  return {stype:it.type||null, trainer:!!it.trainer, avgCad:it.avgCad||null, maxPw:it.maxPw||null, id:'a'+Math.round(it.start/1000), name:it.name||'Attività', sport:st.sport, sub:st.sub||null, source:'Strava', start:it.start, distance:it.distance||0, moving:it.moving||it.elapsed||0, elapsed:it.elapsed||0, gain:it.gain||0, maxAlt:it.maxAlt??null, minAlt:null, avgSpd:it.moving? (it.distance||0)/it.moving*3.6 : 0, maxSpd:(it.maxSpd||0)*3.6, avgHr:it.avgHr||null, maxHr:it.maxHr||null, avgPw:it.avgPw||null, prof:{d:[],alt:[],spd:[],hr:[],pw:[],cad:[]}, track:[], stravaId:it.id};
 }
 async function stravaFetchOne(it){
   const s=await sGet(`/activities/${it.id}/streams`, {keys:'time,latlng,altitude,heartrate,watts,cadence,distance,velocity_smooth', key_by_type:'true'});
@@ -1197,11 +1231,11 @@ async function stravaFetchOne(it){
       const a=processRecords(recs, {name:it.name, sport:st.sport, sub:st.sub, source:'Strava'});
       // Valori ufficiali di Strava, così i numeri coincidono con quelli dell'app Strava
       if(it.distance) a.distance=it.distance; if(it.moving) a.moving=it.moving; if(it.elapsed) a.elapsed=it.elapsed; if(it.gain!=null) a.gain=it.gain;
-      a.avgSpd=a.moving? a.distance/a.moving*3.6 : 0; a.stravaId=it.id;
+      a.avgSpd=a.moving? a.distance/a.moving*3.6 : 0; a.stravaId=it.id; a.stype=it.type||null; a.trainer=!!it.trainer;
       return a;
-    }catch(e){}
+    }catch(e){ const x=summaryAct(it); x.importNote='I dati dettagliati di Strava non si sono potuti leggere ('+e.message+').'; return x; }
   }
-  return summaryAct(it);
+  const x=summaryAct(it); x.importNote= it.manual? 'Attività inserita a mano su Strava: non ha dati registrati.' : 'Strava non ha fornito i dati dettagliati di questa attività.'; return x;
 }
 async function stravaSync(mode){
   if(state.syncing || EMBEDDED) return;
@@ -1219,11 +1253,13 @@ async function stravaSync(mode){
         for(const x of list){
           const start=Date.parse(x.start_date), key=Math.round(start/60000);
           if(have.has(key)||have.has(key-1)||have.has(key+1)||queued.has(x.id)) continue;
-          STRAVA.queue.push({id:x.id, name:x.name, type:x.sport_type||x.type, start, distance:x.distance, moving:x.moving_time, elapsed:x.elapsed_time, gain:x.total_elevation_gain, maxSpd:x.max_speed, avgHr:x.average_heartrate, maxHr:x.max_heartrate, avgPw:x.device_watts? x.average_watts : null, maxAlt:x.elev_high, manual:!!x.manual, trainer:!!x.trainer, photos:x.total_photo_count||0});
+          STRAVA.queue.push({id:x.id, name:x.name, type:x.sport_type||x.type, start, distance:x.distance, moving:x.moving_time, elapsed:x.elapsed_time, gain:x.total_elevation_gain, maxSpd:x.max_speed, avgHr:x.average_heartrate, maxHr:x.max_heartrate, avgPw:x.device_watts? x.average_watts : null, maxAlt:x.elev_high, avgCad:x.average_cadence, maxPw:x.device_watts? x.max_watts : null, manual:!!x.manual, trainer:!!x.trainer, photos:x.total_photo_count||0});
           queued.add(x.id); found++;
         }
         if(list.length<200) break; page++;
       }
+      // uscite di Strava rimaste senza dettagli: le riscarico
+      for(const a of state.acts){ if(a.stravaId && !(a.prof&&a.prof.d&&a.prof.d.length>1) && !a.repairTried && !STRAVA.queue.some(q=>q.id===a.stravaId)){ STRAVA.queue.push({id:a.stravaId, name:a.name, type:a.stype||(a.sub==='mtb'?'MountainBikeRide':a.sub==='gravel'?'GravelRide':a.sport==='ride'?'Ride':a.sport), start:a.start, distance:a.distance, moving:a.moving, elapsed:a.elapsed, gain:a.gain, maxSpd:(a.maxSpd||0)/3.6, avgHr:a.avgHr, maxHr:a.maxHr, avgPw:a.avgPw, maxAlt:a.maxAlt, trainer:!!a.trainer || a.sub==='indoor', repair:a.id}); found++; } }
       STRAVA.queue.sort((a,b)=>b.start-a.start); saveStrava();
       setSync(found? `${found} attività nuove trovate. Scarico i dettagli…` : 'Nessuna attività nuova su Strava.');
     }
@@ -1233,7 +1269,8 @@ async function stravaSync(mode){
       const it=STRAVA.queue[0];
       const a = it.manual ? summaryAct(it) : await stravaFetchOne(it);
       if(it.photos>0){ try{ const ph=await sGet(`/activities/${it.id}/photos`, {size:'1024', photo_sources:'true'}); a.photoUrls=(ph||[]).map(x=>x.urls && (x.urls['1024']||Object.values(x.urls).pop())).filter(Boolean); }catch(e){ if(e instanceof RateLimit) throw e; } }
-      if(!state.acts.some(x=>x.id===a.id)){ state.acts.push(a); await DB.put(a); }
+      if(it.repair){ const old=state.acts.find(x=>x.id===it.repair); if(old){ for(const k of ['photoIds','photoUrls','name']) if(old[k]) a[k]=old[k]; if(!(a.prof&&a.prof.d&&a.prof.d.length>1)) a.repairTried=true; if(a.id!==old.id){ await DB.del(old.id); } Object.keys(old).forEach(k=>delete old[k]); Object.assign(old,a); await DB.put(old); } }
+      else if(!state.acts.some(x=>x.id===a.id)){ state.acts.push(a); await DB.put(a); }
       STRAVA.queue.shift(); saveStrava(); done++;
       setSync(`Scaricate ${done} attività · ne restano ${STRAVA.queue.length}`);
       if(done%10===0){ state.acts.sort((a,b)=>b.start-a.start); recompute(); }
