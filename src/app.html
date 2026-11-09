@@ -88,6 +88,9 @@ button:hover{filter:brightness(1.06)}
 .tag.ex{color:var(--accent);border-color:var(--accent)}
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 input[type=text],input[type=number],input[type=search],select{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+.lmap{width:100%;height:380px;max-width:100%;border-radius:8px;background:var(--surface2);z-index:0}
+@media (max-width:560px){.lmap{height:320px}}
+.leaflet-control-layers,.leaflet-bar a{color:#1b1f1d}
 .map{width:100%;aspect-ratio:3/2;max-width:100%;background:var(--surface2);border-radius:8px;display:block}
 .zones{display:flex;flex-direction:column;gap:6px}
 .zone{display:grid;grid-template-columns:130px 1fr 92px;gap:10px;align-items:center;font-size:13px}
@@ -597,6 +600,40 @@ function routeSVG(track, w, h, mini){
     <text x="${w-12}" y="${h-12}" text-anchor="end" fill="var(--muted)" font-size="12">larghezza ≈ ${nf(kmW,1)} km · N ↑</text></svg>`;
 }
 
+
+/* ====================== mappa vera (strade, satellite, topografica) ====================== */
+let leafletP=null;
+function loadLeaflet(){
+  if(window.L) return Promise.resolve();
+  if(leafletP) return leafletP;
+  leafletP=new Promise((res,rej)=>{
+    const css=document.createElement('link'); css.rel='stylesheet'; css.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'; document.head.append(css);
+    const js=document.createElement('script'); js.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'; js.onload=()=>res(); js.onerror=()=>{ leafletP=null; rej(new Error('mappa non caricata')); }; document.head.append(js);
+  });
+  return leafletP;
+}
+async function initMap(a){
+  const box=$('#lmap'); if(!box) return;
+  try{ await loadLeaflet(); }catch(e){ box.outerHTML=routeSVG(a.track,600,400,false); return; }
+  if(!document.body.contains(box) || state.sel!==a.id) return;
+  const layers={
+    'Stradale': L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:20, subdomains:'abcd', attribution:'© OpenStreetMap · © CARTO'}),
+    'Satellite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19, attribution:'© Esri, Maxar, Earthstar Geographics'}),
+    'Topografica': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17, subdomains:'abc', attribution:'© OpenStreetMap · © OpenTopoMap (CC-BY-SA)'})
+  };
+  let pref='Stradale'; try{ const v=localStorage.getItem('qp-maplayer'); if(layers[v]) pref=v; }catch(e){}
+  const map=L.map(box,{zoomControl:true, attributionControl:true, layers:[layers[pref]], tap:true});
+  state.map=map;
+  L.control.layers(layers,null,{position:'topright'}).addTo(map);
+  map.on('baselayerchange',e=>{ try{ localStorage.setItem('qp-maplayer',e.name); }catch(_){} });
+  L.polyline(a.track,{color:'#ffffff', weight:7, opacity:.85}).addTo(map);
+  const line=L.polyline(a.track,{color:'#f26a10', weight:4, opacity:1}).addTo(map);
+  L.circleMarker(a.track[0],{radius:7, color:'#ffffff', weight:2, fillColor:'#1d8f55', fillOpacity:1}).addTo(map).bindTooltip('Partenza');
+  L.circleMarker(a.track[a.track.length-1],{radius:7, color:'#ffffff', weight:2, fillColor:'#14201b', fillOpacity:1}).addTo(map).bindTooltip('Arrivo');
+  map.fitBounds(line.getBounds(),{padding:[24,24]});
+  setTimeout(()=>map.invalidateSize(),150);
+}
+
 /* ====================== viste ====================== */
 function exampleBanner(){ return state.examples ? `<div class="banner"><p><b>Stai guardando dati di esempio</b> (12 settimane di uscite simulate). Importa i tuoi file FIT/GPX/TCX o l'archivio di Strava per vedere le tue statistiche.</p><button class="primary" data-go="importa">Importa le mie attività</button></div>` : ''; }
 function weekAgg(from, to){ const r=cycling().filter(a=>a.start>=from && a.start<to); return {n:r.length, km:r.reduce((s,a)=>s+a.distance,0)/1000, gain:r.reduce((s,a)=>s+a.gain,0), time:r.reduce((s,a)=>s+a.moving,0)}; }
@@ -699,7 +736,7 @@ function renderDettaglio(){
   v.innerHTML=`<div><button class="back" data-go="attivita">← Tutte le attività</button></div>
   <div><p class="muted">${esc(fmtDate(a.start))} alle ${fmtTime(a.start)} · ${esc(a.source||'')}${a.sub&&SUB_L[a.sub]?' · '+SUB_L[a.sub]:''}</p><h1>${esc(a.name)}${a.isExample?'<span class="tag ex">esempio</span>':''}</h1></div>
   <div class="grid2">
-    <div class="panel">${routeSVG(a.track,600,400,false)}</div>
+    <div class="panel">${!EMBEDDED && a.track && a.track.length>1 ? `<div id="lmap" class="lmap" role="region" aria-label="Mappa del percorso"></div>` : routeSVG(a.track,600,400,false)}</div>
     <div class="panel"><div class="stats">
       ${S('Distanza',nf(a.distance/1000,2),'km')}${S('Dislivello positivo',nf(a.gain),'m')}
       ${S('Tempo in movimento',fmtDur(a.moving))}${S('Tempo trascorso',fmtDur(a.elapsed))}
@@ -736,6 +773,7 @@ function renderDettaglio(){
       {label:'Record', data:WINDOWS.map((w,i)=>({x:w,y:all[i]})).filter(p=>p.y), borderColor:css('--muted'), borderDash:[4,4], borderWidth:1.5},
       {label:'Questa uscita', data:WINDOWS.map((w,i)=>({x:w,y:a.best[i]})).filter(p=>p.y), borderColor:css('--pw'), backgroundColor:alpha(css('--pw'),.15), fill:true, pointRadius:3, pointBackgroundColor:css('--pw')}]},
       options:baseOpts({scales:axes({type:'logarithmic', min:5, max:7200, afterBuildTicks:ax=>{ax.ticks=WINDOWS.map(v=>({value:v}));}, ticks:{color:css('--muted'), callback:v=>durLabel(v), autoSkip:false}},{ticks:{color:css('--muted'), callback:v=>v+' W'}}), plugins:{legend:{display:false}, tooltip:{callbacks:{title:it=>durLabel(it[0].parsed.x), label:it=>it.dataset.label+': '+it.parsed.y+' W'}}}})}); }
+  if($('#lmap')) initMap(a);
   $('#del').onclick=()=>{ $('#delc').hidden=false; $('#del').hidden=true; };
   $('#del-no').onclick=()=>{ $('#delc').hidden=true; $('#del').hidden=false; };
   $('#del-yes').onclick=async()=>{ state.acts=state.acts.filter(x=>x.id!==a.id); await DB.del(a.id); recompute(); go('attivita'); };
@@ -1074,6 +1112,7 @@ function show(view){
   for(const id of [...VIEWS,'dettaglio']) $('#v-'+id).hidden = id!==view;
   document.querySelectorAll('nav.tabs a').forEach(a=>a.setAttribute('aria-current', (a.dataset.v===view || (view==='dettaglio'&&a.dataset.v==='attivita'))? 'page':'false'));
   for(const k in state.charts){ state.charts[k].destroy(); delete state.charts[k]; }
+  if(state.map){ try{ state.map.remove(); }catch(e){} state.map=null; }
   RENDER[view]();
 }
 function go(view){ if(VIEWS.includes(view) && location.hash!=='#'+view){ location.hash=view; } else show(view); }
