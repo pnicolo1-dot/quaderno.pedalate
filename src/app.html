@@ -165,6 +165,14 @@ code{font-size:13px;background:var(--surface2);padding:1px 5px;border-radius:4px
 .fly-btns .seg button{padding:8px 9px}.fly-btns{flex-wrap:nowrap}
 .fly-out a{text-decoration:none}
 .fly-top,.fly-bar,.fly-msg{z-index:3}
+.plan{display:grid;gap:10px}.pw{display:grid;grid-template-columns:92px 1fr;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface2)}
+.pw .day{font-family:var(--f-display);font-weight:700;text-transform:uppercase;color:var(--accent);font-size:14px}.pw p{margin:4px 0 0}.pw .zt{color:var(--hr);font-weight:600}
+table.imp th small{display:block;font-weight:400;font-size:11px;color:var(--muted);white-space:normal;max-width:260px}table.imp tbody th{white-space:normal;min-width:170px}
+.implist{display:grid;gap:0;margin:10px 0}.improw{display:grid;grid-template-columns:1fr auto;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}.improw small{display:block;font-size:12px;color:var(--muted)}.improw .iv{text-align:right;white-space:nowrap}.improw .big{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}
+.bars{display:grid;grid-template-columns:repeat(auto-fit,minmax(36px,1fr));gap:6px;align-items:end;height:120px}.bars div{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:3px;font-size:11px}
+.bars i{display:block;width:70%;min-height:2px;background:var(--accent);border-radius:4px 4px 0 0}.bars span{color:var(--muted)}.bars b{font-size:12px}
+ul.src{padding-left:18px}ul.src li{margin:6px 0}ul.src a{color:var(--info)}
+@media (max-width:560px){.pw{grid-template-columns:1fr}}
 </style>
 
 <header class="top"><div class="wrap bar">
@@ -172,6 +180,7 @@ code{font-size:13px;background:var(--surface2);padding:1px 5px;border-radius:4px
   <nav class="tabs" aria-label="Sezioni">
     <a href="#riepilogo" data-v="riepilogo">Riepilogo</a>
     <a href="#attivita" data-v="attivita">Attività</a>
+    <a href="#statistiche" data-v="statistiche">Statistiche</a>
     <a href="#classifiche" data-v="classifiche">Classifiche</a>
     <a href="#gruppo" data-v="gruppo">Gruppo</a>
     <a href="#forma" data-v="forma">Forma<span class="wide"> e consigli</span></a>
@@ -185,6 +194,7 @@ code{font-size:13px;background:var(--surface2);padding:1px 5px;border-radius:4px
   <section class="view" id="v-riepilogo"></section>
   <section class="view" id="v-attivita" hidden></section>
   <section class="view" id="v-dettaglio" hidden></section>
+  <section class="view" id="v-statistiche" hidden></section>
   <section class="view" id="v-classifiche" hidden></section>
   <section class="view" id="v-gruppo" hidden></section>
   <section class="view" id="v-forma" hidden></section>
@@ -1688,6 +1698,238 @@ function drawYearCompare(){
     options:baseOpts({scales:axes({ticks:{color:css('--muted'), autoSkip:false, maxRotation:0, callback:(v,i)=>labels[i]||null}, grid:{display:false}},{ticks:{color:css('--muted'), callback:v=>nf(v)+' km'}}), plugins:{legend:{display:false}, tooltip:{callbacks:{title:it=>new Date(y,0,1+it[0].dataIndex).toLocaleDateString('it-IT',{day:'numeric',month:'long'}), label:it=>it.dataset.label+': '+nf(it.parsed.y)+' km'}}}})});
 }
 
+/* ====================== statistiche complete, "sto migliorando?", piano e PDF ====================== */
+const MESI=['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+const GIORNI=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+const SOURCES=[
+  {t:'Neal e altri (2013): 6 settimane di allenamento polarizzato danno più adattamenti del lavoro "a soglia" in ciclisti allenati', u:'https://pubmed.ncbi.nlm.nih.gov/23264537/'},
+  {t:'Seiler: la regola 80/20, circa 80% delle sedute facili e 20% intense', u:'https://pezcyclingnews.com/toolbox/cycling-polarized-training-stephen-seiler/'},
+  {t:'Rønnestad e altri (2020): in ciclisti allenati le ripetute brevi 30/15 migliorano la prestazione più delle ripetute lunghe', u:'https://pubmed.ncbi.nlm.nih.gov/31977120/'},
+  {t:'TrainingPeaks: fattore di efficienza e deriva cardiaca come misura della resistenza aerobica', u:'https://help.trainingpeaks.com/hc/en-us/articles/204071724-Aerobic-Decoupling-and-Efficiency-Factor'},
+  {t:'Meta-analisi: il lavoro di forza pesante migliora economia di pedalata e prestazione nei ciclisti', u:'https://www.ncbi.nlm.nih.gov/pmc/articles/PMC12881108/'}
+];
+function aggr(list){
+  const n=list.length, km=list.reduce((s,a)=>s+a.distance,0)/1000, gain=list.reduce((s,a)=>s+(a.gain||0),0), time=list.reduce((s,a)=>s+(a.moving||0),0);
+  const hrL=list.filter(a=>a.avgHr), hr=hrL.length? hrL.reduce((s,a)=>s+a.avgHr*a.moving,0)/hrL.reduce((s,a)=>s+a.moving,0) : null;
+  const kc=list.reduce((s,a)=>s+(kcal(a)||0),0);
+  return {n, km, gain, time, hr, kcal:kc, spd: time? km/(time/3600) : null};
+}
+function statsSince(p){ const n=new Date(); return p==='anno'? new Date(n.getFullYear(),0,1).getTime() : p==='12m'? Date.now()-365*DAY : p==='90'? Date.now()-90*DAY : 0; }
+const mean=arr=>arr.length? arr.reduce((s,x)=>s+x,0)/arr.length : null;
+// indicatori per capire se stai migliorando: periodo recente contro periodo precedente
+const IND=[
+  {k:'vol', l:'Ore in sella a settimana', u:'h', d:1, better:1, f:(L,days)=>L.length? L.reduce((s,a)=>s+a.moving,0)/3600/(days/7) : null, why:'Più ore costanti = più base aerobica.'},
+  {k:'ctl', l:'Condizione (Fitness)', u:'', d:0, better:1, why:'Media del carico degli ultimi 42 giorni.'},
+  {k:'spd', l:'Velocità media in bici (uscite oltre 15 km)', u:'km/h', d:1, better:1, f:L=>mean(L.filter(a=>kindOf(a)==='bike'&&a.distance>15000&&a.avgSpd).map(a=>a.avgSpd)), why:'Dipende anche dal percorso: guardala insieme alla salita.'},
+  {k:'vam', l:'Velocità in salita (VAM, uscite con almeno 15 m/km)', u:'m/h', d:0, better:1, f:L=>mean(L.filter(a=>kindOf(a)==='bike'&&a.gain>300&&a.distance>5000&&a.gain/(a.distance/1000)>=15&&a.moving).map(a=>a.gain/(a.moving/3600))), why:'Metri di dislivello guadagnati per ora: il miglior indice per chi fa MTB.'},
+  {k:'ef', l:'Efficienza: velocità per battito', u:'', d:2, better:1, f:L=>{ const x=L.filter(a=>kindOf(a)==='bike'&&a.avgHr>90&&a.avgSpd&&a.distance>10000); return x.length>=2? mean(x.map(a=>a.avgSpd/a.avgHr*10)) : null; }, why:'Km/h ogni 10 battiti: se sale vai più forte con lo stesso cuore.'},
+  {k:'pef', l:'Efficienza: watt per battito', u:'W/bpm', d:2, better:1, f:L=>{ const x=L.filter(a=>(a.np||a.avgPw)&&a.avgHr>90); return x.length>=2? mean(x.map(a=>(a.np||a.avgPw)/a.avgHr)) : null; }, why:'Il "fattore di efficienza" usato dagli allenatori: più alto è meglio.'},
+  {k:'p20', l:'Potenza migliore 20 minuti', u:'W', d:0, better:1, f:L=>{ const i=WINDOWS.indexOf(1200); const v=L.map(a=>a.best&&a.best[i]).filter(Boolean); return v.length? Math.max(...v) : null; }, why:'Stima della tua soglia (FTP ≈ 95%).'},
+  {k:'dec', l:'Deriva cardiaca nelle uscite lunghe', u:'%', d:1, better:-1, f:L=>{ const v=L.map(a=>a.decoupling).filter(x=>x!=null); return v.length>=2? mean(v) : null; }, why:'Quanto sale il battito nella seconda metà: più bassa = più resistenza.'}
+];
+function improvement(days=90){
+  const now=Date.now(), rides=allRides();
+  const A=rides.filter(a=>a.start>=now-days*DAY), B=rides.filter(a=>a.start>=now-2*days*DAY && a.start<now-days*DAY);
+  const Y=rides.filter(a=>a.start>=now-365*DAY-days*DAY && a.start<now-365*DAY);
+  const F=state.fitness, ctlAt=t=>{ const f=[...F].reverse().find(x=>x.d<=t); return f? f.ctl : null; };
+  const rows=IND.map(m=>{
+    const cur=m.k==='ctl'? ctlAt(now) : m.f(A,days), prev=m.k==='ctl'? ctlAt(now-days*DAY) : m.f(B,days), ly=m.k==='ctl'? ctlAt(now-365*DAY) : m.f(Y,days);
+    let pct=null, verdict='n';
+    if(cur!=null && prev){ pct=(cur-prev)/Math.abs(prev)*100; const s=pct*m.better; verdict= s>2? 'up' : s<-2? 'down' : 'eq'; }
+    return {m, cur, prev, ly, pct, verdict};
+  }).filter(r=>r.cur!=null || r.prev!=null);
+  const up=rows.filter(r=>r.verdict==='up').length, down=rows.filter(r=>r.verdict==='down').length;
+  let title, text, cls;
+  if(!A.length){ title='Nessuna uscita negli ultimi '+days+' giorni'; text='Riprendi a pedalare con regolarità e torna qui fra qualche settimana.'; cls='c-warn'; }
+  else if(!B.length){ title='Confronto non ancora possibile'; text=`Non ci sono uscite nei ${days} giorni prima da confrontare. Importa lo storico da Strava (o aspetta qualche settimana) e qui vedrai se stai migliorando.`; cls='c-info'; }
+else if(up>=down+2){ title='Sì, stai migliorando'; text=`${up} indicatori su ${rows.length} sono migliori rispetto ai ${days} giorni precedenti.`; cls='c-good'; }
+  else if(down>=up+2){ title='In questo periodo sei calato'; text=`${down} indicatori su ${rows.length} sono peggiori rispetto ai ${days} giorni precedenti. Spesso dipende da meno ore in sella o da stanchezza.`; cls='c-bad'; }
+  else { title='Sei stabile'; text=`${up} indicatori migliorano e ${down} peggiorano: stai mantenendo la condizione. Per crescere serve uno stimolo nuovo (vedi il piano qui sotto).`; cls='c-info'; }
+  return {rows, up, down, title, text, cls, nA:A.length, nB:B.length};
+}
+function monthly(n=12){
+  const out=[], d=new Date(); d.setDate(1); d.setHours(0,0,0,0); d.setMonth(d.getMonth()-(n-1));
+  for(let i=0;i<n;i++){ const s=d.getTime(); d.setMonth(d.getMonth()+1); const e=d.getTime(); const L=cycling().filter(a=>a.start>=s&&a.start<e);
+    const g=aggr(L), v=IND.find(m=>m.k==='vam').f(L), ef=IND.find(m=>m.k==='ef').f(L);
+    out.push({s, label:MESI[new Date(s).getMonth()]+(new Date(s).getMonth()===0||i===0?' '+String(new Date(s).getFullYear()).slice(2):''), ...g, vam:v, ef}); }
+  return out;
+}
+// profilo dell'atleta e piano
+function athlete(){
+  const now=Date.now(), L=allRides().filter(a=>a.start>=now-56*DAY);
+  const hours=L.reduce((s,a)=>s+a.moving,0)/3600/8, perWeek=L.length/8;
+  const z=zonesSince(now-56*DAY), tot=z.reduce((a,b)=>a+b,0);
+  const zs= tot>2*3600? {z12:(z[0]+z[1])/tot, z3:z[2]/tot, z45:(z[3]+z[4])/tot} : null;
+  const dec=mean(L.map(a=>a.decoupling).filter(x=>x!=null));
+  const longest=Math.max(0,...L.map(a=>a.moving/3600));
+  const mtb=L.filter(a=>a.sub==='mtb'||a.gain/(Math.max(1,a.distance)/1000)>=15).length>=L.length/2;
+  return {L, hours, perWeek, zs, dec, longest, mtb};
+}
+function hrRange(lo,hi){ const hm=hrMaxEff(); return `${Math.round(lo*hm)}–${Math.round(hi*hm)} bpm`; }
+function pwRange(lo,hi){ const f=ftpEff(); return f? ` · ${Math.round(lo*f)}–${Math.round(hi*f)} W` : ''; }
+function workouts(){
+  return {
+    fondo:{t:'Fondo lungo in Z2', d:'2–3 ore (o la tua uscita della domenica) a ritmo in cui riesci a parlare. In salita alleggerisci il rapporto per non superare il limite: in MTB è la regola più difficile da rispettare.', z:`Battito ${hrRange(0.60,0.70)}${pwRange(0.56,0.75)}`, src:0},
+    r3015:{t:'Ripetute 30/15 (Rønnestad)', d:'Riscaldamento 15′. Poi 3 serie da 13 ripetizioni: 30″ forte e 15″ pedalando piano. 3′ facili tra una serie e l\'altra. Defaticamento 10′. Perfetta sulla spin bike o su una salita regolare.', z:`Nei 30″ sforzo 9 su 10: il battito sale verso ${hrRange(0.88,0.95)} a fine serie${pwRange(1.2,1.4)}`, src:2},
+    soglia:{t:'Soglia 3×10′', d:'Riscaldamento 15′, poi 3 blocchi da 10′ a ritmo "duro ma sostenibile" con 5′ facili in mezzo. Su una salita lunga in MTB funziona benissimo.', z:`Battito ${hrRange(0.80,0.90)}${pwRange(0.91,1.05)}`, src:1},
+    salite:{t:'Salite ripetute MTB', d:'Scegli una salita da 3–5 minuti. 5–6 ripetute forti, scendi piano per recuperare. Allena forza e tecnica in salita: la VAM salirà.', z:`In salita ${hrRange(0.85,0.93)}${pwRange(1.05,1.2)}`, src:1},
+    recupero:{t:'Uscita di recupero', d:'45–60′ in pianura o sulla spin bike, agile e senza sforzo. Fa circolare il sangue e accelera il recupero.', z:`Battito sotto ${Math.round(0.65*hrMaxEff())} bpm`, src:0},
+    forza:{t:'Forza in palestra', d:'2 volte a settimana in inverno, 1 in stagione: squat o pressa, stacco rumeno, affondi. 3–4 serie da 4–6 ripetizioni pesanti, movimento controllato. Migliora la pedalata e protegge le articolazioni, specie dopo i 40 anni.', z:'Carico che ti permette solo 6–8 ripetizioni', src:4}
+  };
+}
+function plan(at){
+  const W=workouts(), out=[], why=[];
+  if(at.zs && at.zs.z3>0.30) why.push(`Il ${nf(at.zs.z3*100)}% del tuo tempo è in Z3, la "zona grigia": stanca ma allena poco. Il piano separa uscite davvero facili e sedute brevi e intense.`);
+  if(at.zs && at.zs.z45<0.05) why.push('Fai pochissimo lavoro intenso: una seduta di qualità a settimana ti alzerà soglia e VO2max.');
+  if(at.dec!=null && at.dec>7) why.push(`La deriva cardiaca media è ${nf(at.dec,1)}%: serve più fondo lungo a ritmo costante.`);
+  if(at.perWeek<2) why.push(`Esci in media ${nf(at.perWeek,1)} volte a settimana: la costanza viene prima di tutto.`);
+  if(at.mtb) why.push('Le tue uscite hanno tanta salita: ho messo lavoro specifico in salita.');
+  if(!why.length) why.push('La tua distribuzione è già buona: il piano mantiene l\'80% facile e aggiunge qualità.');
+  const n=at.perWeek<2.5? 3 : at.perWeek<3.5? 3 : 4;
+  if(n===3){ out.push(['Martedì',W.r3015],['Giovedì',at.zs&&at.zs.z45>=0.1? W.recupero : at.mtb? W.salite : W.soglia],['Domenica',W.fondo]); }
+  else { out.push(['Martedì',W.r3015],['Mercoledì',W.recupero],['Giovedì',at.mtb? W.salite : W.soglia],['Domenica',W.fondo]); }
+  out.push(['Lunedì e venerdì',W.forza]);
+  return {why, week:out, hoursTarget: Math.max(4, Math.min(12, Math.round((at.hours||3)*1.1))) };
+}
+function statsVerdictIcon(v){ return v==='up'? '<span class="c-good" aria-label="migliorato">▲</span>' : v==='down'? '<span class="c-bad" aria-label="peggiorato">▼</span>' : v==='eq'? '<span class="c-info" aria-label="stabile">●</span>' : '<span class="muted">–</span>'; }
+function fmtInd(r,v){ if(v==null) return '–'; return nf(v,r.m.d)+(r.m.u? ' '+r.m.u : ''); }
+function renderStatistiche(){
+  const v=$('#v-statistiche');
+  if(!cycling().length){ v.innerHTML=`${kindBar()}<div class="panel empty">Importa qualche uscita per vedere le statistiche.</div>`; return; }
+  const p=state.stPeriod||'sempre', since=statsSince(p), L=cycling().filter(a=>a.start>=since), g=aggr(L);
+  const days=Math.max(7,(Date.now()-Math.max(since, Math.min(...L.map(a=>a.start))))/DAY);
+  const years=[...new Set(cycling().map(a=>new Date(a.start).getFullYear()))].sort((a,b)=>b-a);
+  const yrows=years.map(y=>({y, ...aggr(cycling().filter(a=>new Date(a.start).getFullYear()===y))}));
+  const S=(l,val,u='')=>`<div class="stat"><div class="lab">${l}</div><div class="val">${val}${u?`<small>${u}</small>`:''}</div></div>`;
+  const wd=[0,0,0,0,0,0,0]; L.forEach(a=>wd[(new Date(a.start).getDay()+6)%7]++);
+  const bk=[[0,20],[20,40],[40,60],[60,80],[80,1e9]].map(([lo,hi])=>L.filter(a=>a.distance/1000>=lo&&a.distance/1000<hi).length);
+  const imp=improvement(90), at=athlete(), pl=plan(at), W=workouts();
+  const longest=L.reduce((b,a)=>!b||a.distance>b.distance?a:b,null), most=L.reduce((b,a)=>!b||a.gain>b.gain?a:b,null);
+  v.innerHTML=`${exampleBanner()}<div class="toolbar" style="justify-content:space-between"><div><h1>Statistiche</h1><p class="muted">Tutti i numeri delle tue uscite, se stai migliorando e cosa fare adesso.</p></div>${kindBar()}</div>
+  <div class="panel"><div class="toolbar" style="justify-content:space-between"><h3>Totali</h3>
+    <div class="seg" role="group" aria-label="Periodo">${[['sempre','Sempre'],['anno','Quest\'anno'],['12m','12 mesi'],['90','90 giorni']].map(([k,l])=>`<button data-stp="${k}" aria-pressed="${p===k}">${l}</button>`).join('')}</div></div>
+    <div class="stats">
+      ${S('Uscite',nf(g.n))}${S('Distanza',nf(g.km),'km')}${S('Dislivello',nf(g.gain),'m')}${S('Tempo in sella',fmtHM(g.time))}
+      ${S('Uscite a settimana',nf(g.n/(days/7),1))}${S('Km a settimana',nf(g.km/(days/7)),'km')}${S('Km per uscita',nf(g.n?g.km/g.n:null,1),'km')}${S('Dislivello per uscita',nf(g.n?g.gain/g.n:null),'m')}
+      ${S('Velocità media',nf(g.spd,1),'km/h')}${g.hr?S('FC media',nf(g.hr),'bpm'):''}${g.kcal?S('Calorie',nf(g.kcal),'kcal'):''}${S('Everest scalati',nf(g.gain/8849,1))}
+    </div>
+    ${longest?`<p class="small muted" style="margin-top:12px">Uscita più lunga: <a data-open="${longest.id}">${esc(longest.name)}</a> (${nf(longest.distance/1000,1)} km) · più salita: <a data-open="${most.id}">${esc(most.name)}</a> (${nf(most.gain)} m)</p>`:''}
+  </div>
+  <div class="panel"><div class="toolbar" style="justify-content:space-between"><h3>Sto migliorando?</h3><span class="chip ${imp.cls}">${esc(imp.title)}</span></div>
+    <p>${esc(imp.text)}</p>
+    <div class="implist">${imp.rows.map(r=>`<div class="improw"><div><b>${esc(r.m.l)}</b><small>${esc(r.m.why)}</small></div><div class="iv"><span class="big">${statsVerdictIcon(r.verdict)} ${fmtInd(r,r.cur)}</span><small>prima ${fmtInd(r,r.prev)}${r.pct!=null?` · ${r.pct>=0?'+':'−'}${nf(Math.abs(r.pct),1)}%`:''}</small><small>un anno fa ${fmtInd(r,r.ly)}</small></div></div>`).join('')}</div>
+    <p class="small muted">Confronto tra gli ultimi 90 giorni (${imp.nA} uscite) e i 90 giorni prima (${imp.nB} uscite). Velocità e salita dipendono anche dai percorsi: un indicatore conta davvero quando si muove insieme agli altri.</p>
+    <div class="chart"><canvas id="ch-trend"></canvas></div>
+    <div class="legend"><span><i style="background:var(--elev)"></i>km al mese</span><span><i style="background:var(--accent)"></i>velocità in salita (m/h)</span><span><i style="background:var(--hr)"></i>efficienza (km/h ogni 10 battiti)</span></div>
+  </div>
+  <div class="panel"><h3>Il tuo piano per le prossime 4 settimane</h3>
+    <div class="advice">${pl.why.map(t=>advHTML({c:'info', t:'Perché', p:t})).join('')}</div>
+    <p class="small muted" style="margin:10px 0">Obiettivo: circa ${pl.hoursTarget} ore a settimana (ora ne fai ${nf(at.hours,1)}). Settimane 1–3 in crescita, settimana 4 di scarico con il 40% in meno.</p>
+    <div class="plan">${pl.week.map(([d,w])=>`<div class="pw"><span class="day">${esc(d)}</span><div><b>${esc(w.t)}</b><p class="small">${esc(w.d)}</p><p class="small zt">${esc(w.z)}</p></div></div>`).join('')}</div>
+    <details style="margin-top:12px"><summary class="small"><b>Altri allenamenti utili</b></summary><div class="plan">${Object.values(W).filter(w=>!pl.week.some(x=>x[1]===w)).map(w=>`<div class="pw"><span class="day">+</span><div><b>${esc(w.t)}</b><p class="small">${esc(w.d)}</p><p class="small zt">${esc(w.z)}</p></div></div>`).join('')}</div></details>
+    <p class="small muted" style="margin-top:12px">Zone calcolate su FC max ${hrMaxEff()} bpm${ftpEff()?` e FTP ${ftpEff()} W`:''}: se non sono giuste aggiornale nel Profilo. Se hai problemi di cuore o di salute parlane prima con il medico sportivo.</p>
+    <details><summary class="small">Da dove vengono questi consigli</summary><ul class="small src">${SOURCES.map(s=>`<li><a href="${s.u}" target="_blank" rel="noopener">${esc(s.t)}</a></li>`).join('')}</ul></details>
+  </div>
+  <div class="grid2">
+    <div class="panel"><h3>Anno per anno</h3><div class="tablewrap"><table class="gt"><thead><tr><th>Anno</th><th>Uscite</th><th>km</th><th>D+ m</th><th>Ore</th><th>km/h</th></tr></thead><tbody>
+      ${yrows.map(r=>`<tr><th>${r.y}</th><td>${r.n}</td><td>${nf(r.km)}</td><td>${nf(r.gain)}</td><td>${nf(r.time/3600)}</td><td>${nf(r.spd,1)}</td></tr>`).join('')}</tbody></table></div></div>
+    <div class="panel"><h3>Come esci</h3>
+      <p class="small muted">Giorni della settimana</p><div class="bars">${wd.map((c,i)=>`<div><i style="height:${Math.round(c/Math.max(1,...wd)*100)}%"></i><span>${GIORNI[i]}</span><b>${c}</b></div>`).join('')}</div>
+      <p class="small muted" style="margin-top:14px">Lunghezza delle uscite</p><div class="bars">${bk.map((c,i)=>`<div><i style="height:${Math.round(c/Math.max(1,...bk)*100)}%"></i><span>${['<20','20–40','40–60','60–80','80+'][i]}</span><b>${c}</b></div>`).join('')}</div></div>
+  </div>
+  <div class="panel"><div class="toolbar" style="justify-content:space-between"><div><h3>Report in PDF</h3><p class="small muted">Statistiche, miglioramenti, forma, consigli e piano in un PDF da salvare, stampare o mandare al tuo allenatore.</p></div><button class="primary" id="pdf-go">Crea il PDF</button></div><div id="pdf-out"></div></div>`;
+  const M=monthly(12);
+  chart('ch-trend',{data:{labels:M.map(m=>m.label), datasets:[
+    {type:'bar', label:'km', data:M.map(m=>Math.round(m.km)), backgroundColor:alpha(css('--elev'),.5), yAxisID:'y', order:3},
+    {type:'line', label:'VAM', data:M.map(m=>m.vam?Math.round(m.vam):null), borderColor:css('--accent'), yAxisID:'y1', spanGaps:true, pointRadius:3, order:1},
+    {type:'line', label:'Efficienza', data:M.map(m=>m.ef?+m.ef.toFixed(2):null), borderColor:css('--hr'), yAxisID:'y2', spanGaps:true, pointRadius:3, borderDash:[4,3], order:2}]},
+    options:baseOpts({scales:Object.assign(axes({ticks:{color:css('--muted'), maxRotation:0, autoSkip:true}, grid:{display:false}},{ticks:{color:css('--muted'), callback:v=>v+' km'}}),
+      {y1:{position:'right', grid:{display:false}, border:{display:false}, ticks:{color:css('--accent'), callback:v=>v+' m/h'}}, y2:{display:false}}),
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:it=>it.dataset.label+': '+(it.dataset.label==='km'?nf(it.parsed.y)+' km':it.dataset.label==='VAM'?nf(it.parsed.y)+' m/h':nf(it.parsed.y,2))}}}})});
+  $('#pdf-go').onclick=makePDF;
+}
+document.addEventListener('click',e=>{ const b=e.target.closest('[data-stp]'); if(b){ state.stPeriod=b.dataset.stp; renderStatistiche(); } });
+
+/* ---------- PDF ---------- */
+let pdfP=null;
+function loadJsPDF(){
+  if(window.jspdf) return Promise.resolve();
+  if(pdfP) return pdfP;
+  pdfP=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js'; s.onload=()=>window.jspdf? res() : (pdfP=null, rej(new Error('PDF'))); s.onerror=()=>{ pdfP=null; rej(new Error('PDF')); }; document.head.append(s); });
+  return pdfP;
+}
+// i caratteri base del PDF non hanno simboli speciali: li sostituisco
+const pdfTxt=s=>String(s??'').replace(/[−–—]/g,'-').replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/…/g,'...').replace(/″/g,'"').replace(/′/g,"'").replace(/≈/g,'~').replace(/×/g,'x').replace(/→/g,'->').replace(/[▲▼●]/g,'').replace(/[^\x00-\xff]/g,'');
+async function makePDF(){
+  const out=$('#pdf-out'), btn=$('#pdf-go'); btn.disabled=true; btn.textContent='Preparo il PDF…';
+  try{ await loadJsPDF(); }catch(e){ out.innerHTML='<p class="small c-bad">Per creare il PDF serve internet la prima volta. Riprova quando sei connesso.</p>'; btn.disabled=false; btn.textContent='Crea il PDF'; return; }
+  const {jsPDF}=window.jspdf, doc=new jsPDF({unit:'mm', format:'a4'});
+  const PW=210, M=14, CW=PW-2*M; let y=M;
+  const OR=[252,82,0], GR=[110,110,110], BK=[25,25,25];
+  const need=h=>{ if(y+h>285){ doc.addPage(); y=M; } };
+  const txt=(s,o={})=>{ doc.setFont('helvetica',o.b?'bold':'normal'); doc.setFontSize(o.s||10); doc.setTextColor(...(o.c||BK)); const lines=doc.splitTextToSize(pdfTxt(s), o.w||CW); const lh=(o.s||10)*0.42; need(lines.length*lh+1); doc.text(lines, o.x||M, y+lh*0.8); y+=lines.length*lh+(o.after??1.5); };
+  const h2=s=>{ y+=3; need(14); doc.setFillColor(...OR); doc.rect(M,y,2,6,'F'); txt(s,{b:true,s:13,x:M+4,after:2}); };
+  const table=(head,rows,widths)=>{ const lh=6; need(lh*2); doc.setFontSize(8.5);
+    const row=(cells,bold,fill)=>{ need(lh); if(fill){ doc.setFillColor(242,242,242); doc.rect(M,y,CW,lh,'F'); } let x=M; cells.forEach((c,i)=>{ doc.setFont('helvetica', bold||i===0?'bold':'normal'); doc.setTextColor(...(bold?GR:BK)); const t=pdfTxt(c); if(i===0) doc.text(doc.splitTextToSize(t,widths[0]-2)[0], x+1.5, y+4.2); else doc.text(t, x+widths[i]-1.5, y+4.2, {align:'right'}); x+=widths[i]; }); y+=lh; };
+    row(head,true,false); doc.setDrawColor(200); doc.line(M,y,M+CW,y); rows.forEach((r,i)=>row(r,false,i%2===0)); y+=3; };
+  // intestazione
+  doc.setFillColor(18,18,18); doc.rect(0,0,PW,30,'F'); doc.setFillColor(...OR); doc.rect(0,30,PW,1.5,'F');
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(18); doc.text('Quaderno Pedalate - Report', M, 13);
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.text(pdfTxt(`${fullName()||'Ciclista'} · LDM - La Domenica Mattina Team`), M, 20);
+  doc.text(pdfTxt(`Creato il ${new Date().toLocaleDateString('it-IT',{day:'numeric',month:'long',year:'numeric'})}`), M, 25.5);
+  y=38;
+  txt(`Profilo: ${profile.age?profile.age+' anni · ':''}${profile.weight} kg · FC max ${hrMaxEff()} bpm${ftpEff()?` · FTP ${ftpEff()} W (${nf(ftpEff()/profile.weight,2)} W/kg)`:''}`,{c:GR,s:9});
+  // totali
+  const rides=allRides(), periods=[['Ultimi 90 giorni',statsSince('90')],['Quest\'anno',statsSince('anno')],['Ultimi 12 mesi',statsSince('12m')],['Da sempre',0]];
+  h2('Totali');
+  table(['Periodo','Uscite','km','Dislivello m','Ore','km/h','FC media'], periods.map(([l,s])=>{ const g=aggr(rides.filter(a=>a.start>=s)); return [l,nf(g.n),nf(g.km),nf(g.gain),nf(g.time/3600),nf(g.spd,1),g.hr?nf(g.hr):'-']; }), [44,18,22,30,20,20,28]);
+  const years=[...new Set(rides.map(a=>new Date(a.start).getFullYear()))].sort((a,b)=>b-a);
+  h2('Anno per anno');
+  table(['Anno','Uscite','km','Dislivello m','Ore','km/uscita','km/h'], years.map(yy=>{ const g=aggr(rides.filter(a=>new Date(a.start).getFullYear()===yy)); return [String(yy),nf(g.n),nf(g.km),nf(g.gain),nf(g.time/3600),nf(g.n?g.km/g.n:0,1),nf(g.spd,1)]; }), [44,18,22,30,20,20,28]);
+  // grafico km al mese
+  const Mo=(()=>{ const k=state.kind; state.kind='all'; const r=monthly(12); state.kind=k; return r; })();
+  h2('Chilometri e dislivello negli ultimi 12 mesi'); need(52);
+  const gx=M+10, gw=CW-12, gh=36, gy=y+2, mx=Math.max(1,...Mo.map(m=>m.km)), bw=gw/Mo.length;
+  doc.setDrawColor(210); doc.line(gx,gy+gh,gx+gw,gy+gh); doc.setFontSize(7); doc.setTextColor(...GR); doc.text(nf(mx)+' km',M,gy+3);
+  Mo.forEach((m,i)=>{ const h=m.km/mx*gh; doc.setFillColor(...OR); doc.rect(gx+i*bw+1.5, gy+gh-h, bw-3, h, 'F'); doc.setTextColor(...GR); doc.text(pdfTxt(MESI[new Date(m.s).getMonth()]), gx+i*bw+bw/2, gy+gh+4, {align:'center'}); if(m.km){ doc.setTextColor(...BK); doc.text(nf(m.km), gx+i*bw+bw/2, gy+gh-h-1, {align:'center'}); doc.setTextColor(...GR); doc.text(nf(m.gain)+' m', gx+i*bw+bw/2, gy+gh+8, {align:'center'}); } });
+  y=gy+gh+12;
+  // miglioramento
+  const imp=improvement(90);
+  h2('Sto migliorando?');
+  txt(imp.title,{b:true,s:11,c:imp.cls==='c-good'?[30,140,80]:imp.cls==='c-bad'?[200,40,40]:OR});
+  txt(imp.text);
+  table(['Indicatore','90 gg prima','Ultimi 90 gg','Variazione','Un anno fa'], imp.rows.map(r=>[r.m.l, fmtInd(r,r.prev), fmtInd(r,r.cur), r.pct!=null? (r.verdict==='up'?'meglio ':r.verdict==='down'?'peggio ':'= ')+(r.pct>=0?'+':'-')+nf(Math.abs(r.pct),1)+'%' : '-', fmtInd(r,r.ly)]), [76,26,26,28,26]);
+  imp.rows.forEach(r=>txt(`· ${r.m.l}: ${r.m.why}`,{s:8,c:GR,after:0.5}));
+  // forma
+  const F=state.fitness, Lf=F[F.length-1];
+  if(Lf){ h2('Forma attuale'); const fs=formState(Lf.tsb); txt(`Fitness ${nf(Lf.ctl)} · Fatica ${nf(Lf.atl)} · Forma ${Lf.tsb>0?'+':''}${nf(Lf.tsb)} (${fs.l})`,{b:true});
+    txt('Fitness = media del carico degli ultimi 42 giorni; Fatica = ultimi 7 giorni; Forma = Fitness - Fatica.',{s:8.5,c:GR}); }
+  // zone
+  const at=athlete();
+  h2('Le tue zone di battito');
+  const hm=hrMaxEff(), lim=[0.5,...HRZ,1];
+  table(['Zona','Da','A','Uso'], HRZ_N.map((n,i)=>[n, Math.round(lim[i]*hm)+' bpm', Math.round(lim[i+1]*hm)+' bpm', ['recupero attivo','fondo lungo, 80% del tempo','ritmo medio: da limitare','soglia, salite','ripetute brevi'][i]]), [50,26,26,80]);
+  if(at.zs) txt(`Ultime 8 settimane: ${nf(at.zs.z12*100)}% facile (Z1-Z2), ${nf(at.zs.z3*100)}% medio (Z3), ${nf(at.zs.z45*100)}% intenso (Z4-Z5). L'obiettivo è circa 80% facile e 20% intenso, con poco Z3.`,{s:9});
+  // consigli
+  h2('Consigli dai tuoi dati');
+  buildAdvice().forEach(a=>{ txt(a.t,{b:true,after:0.5}); txt(a.p,{s:9,c:[60,60,60]}); });
+  // piano
+  const pl=plan(at);
+  h2('Piano per le prossime 4 settimane');
+  pl.why.forEach(t=>txt('· '+t,{s:9}));
+  txt(`Obiettivo circa ${pl.hoursTarget} ore a settimana (ora ${nf(at.hours,1)}). Settimane 1-3 in crescita, settimana 4 di scarico (-40%).`,{s:9,c:GR});
+  pl.week.forEach(([d,w])=>{ need(20); txt(`${d} - ${w.t}`,{b:true,c:OR,after:0.5}); txt(w.d,{s:9,after:0.5}); txt(w.z,{s:9,c:GR}); });
+  h2('Fonti');
+  SOURCES.forEach(s=>{ txt(s.t,{s:8.5,after:0}); txt(s.u,{s:7.5,c:[30,90,200]}); });
+  txt('Questi consigli non sostituiscono il medico sportivo o un allenatore.',{s:8,c:GR});
+  const pages=doc.getNumberOfPages(); for(let i=1;i<=pages;i++){ doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(...GR); doc.text(`Quaderno Pedalate · pagina ${i} di ${pages}`, PW/2, 292, {align:'center'}); }
+  const name=`report-pedalate-${new Date().toISOString().slice(0,10)}.pdf`, blob=doc.output('blob'), file=new File([blob],name,{type:'application/pdf'});
+  const u=URL.createObjectURL(blob), canSh=navigator.canShare && navigator.canShare({files:[file]});
+  out.innerHTML=`<div class="toolbar" style="margin-top:12px"><span class="small"><b>PDF pronto</b> · ${pages} pagine</span>${canSh?'<button class="primary" id="pdf-sh">Condividi / Salva</button>':''}<a class="btn" href="${u}" download="${name}">Scarica</a><a class="btn" href="${u}" target="_blank" rel="noopener">Apri</a></div>`;
+  if(canSh) $('#pdf-sh').onclick=async()=>{ try{ await navigator.share({files:[file], title:'Report pedalate'}); }catch(e){} };
+  btn.disabled=false; btn.textContent='Crea di nuovo';
+}
+
 /* ====================== calendario ====================== */
 function calendarHTML(){
   const base=state.calMonth? new Date(state.calMonth) : new Date(); const y=base.getFullYear(), mo=base.getMonth();
@@ -1705,8 +1947,8 @@ function calendarHTML(){
 document.addEventListener('click',e=>{ const c=e.target.closest('[data-cal]'); if(c){ const b=state.calMonth? new Date(state.calMonth) : new Date(); state.calMonth=new Date(b.getFullYear(), b.getMonth()+(+c.dataset.cal), 1).getTime(); const p=$('#cal-wrap'); if(p) p.innerHTML=calendarHTML(); } });
 
 /* ====================== navigazione ====================== */
-const VIEWS=['riepilogo','attivita','classifiche','gruppo','forma','importa','profilo'];
-const RENDER={riepilogo:renderRiepilogo, attivita:renderAttivita, dettaglio:renderDettaglio, classifiche:renderClassifiche, gruppo:renderGruppo, forma:renderForma, importa:renderImporta, profilo:renderProfilo};
+const VIEWS=['riepilogo','attivita','statistiche','classifiche','gruppo','forma','importa','profilo'];
+const RENDER={riepilogo:renderRiepilogo, attivita:renderAttivita, statistiche:renderStatistiche, dettaglio:renderDettaglio, classifiche:renderClassifiche, gruppo:renderGruppo, forma:renderForma, importa:renderImporta, profilo:renderProfilo};
 function show(view){
   if(typeof flyStop==='function' && $('#fly')) flyStop();
   renderMe();
