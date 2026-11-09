@@ -32,6 +32,14 @@ nav.tabs a{font-family:var(--f-display);font-weight:600;font-size:16px;letter-sp
 nav.tabs a[aria-current="page"]{background:var(--accent);color:var(--on-accent)}
 nav.tabs a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 main{padding-block:20px 60px}
+.friend{display:flex;gap:12px;align-items:center;background:var(--surface2);border-radius:8px;padding:8px 10px}
+ol.rank .grow{display:grid;grid-template-columns:34px 34px 1fr auto;gap:10px;align-items:center;background:var(--surface2);border-radius:8px;padding:8px 10px;border:1px solid transparent}ol.rank .grow.me-row{border-color:var(--accent)}ol.rank .grow .who{min-width:0;display:flex;flex-direction:column}ol.rank .grow .who b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}ol.rank .grow .who small{color:var(--muted);font-size:12px}
+.tablewrap{overflow-x:auto;max-width:100%}table.gt{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:14px}table.gt th,table.gt td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;vertical-align:top}table.gt tbody th{text-align:left;color:var(--muted);font-weight:500}table.gt thead th{vertical-align:bottom}table.gt thead th span{display:block;font-size:12px;margin-top:3px}table.gt thead th .avatar{display:inline-flex}table.gt td small{display:block;font-size:11px;color:var(--muted)}table.gt td.best{color:var(--accent);font-weight:700}
+details.gride{background:var(--surface2);border-radius:8px;padding:8px 10px}details.gride summary{cursor:pointer}details.gride[open]{display:flex;flex-direction:column;gap:8px}
+.goals{display:flex;flex-direction:column;gap:14px}.goal .bar{position:relative;display:block;height:10px;border-radius:5px;background:var(--surface2);margin:6px 0 4px;overflow:visible}.goal .bar i{display:block;height:100%;border-radius:5px;background:var(--accent)}.goal .bar em{position:absolute;top:-3px;width:2px;height:16px;background:var(--fg);opacity:.6}.goal small{font-size:13px}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}.cal .wd{text-align:center;font-size:11px;color:var(--muted);font-weight:600}.cal-d{min-height:52px;border-radius:6px;background:var(--surface2);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:4px 2px;font-size:13px;color:var(--muted);border:1px solid transparent;font-weight:400}.cal-d.has{color:var(--fg);cursor:pointer;background:var(--accent-soft)}.cal-d.today{border-color:var(--accent)}.cal-d i{display:flex;gap:2px;margin-top:2px}.cal-d small{font-size:10px;color:var(--muted)}
+.cal-d b,.cal-key b{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent)}.cal-d b.spin,.cal-key b.spin{background:var(--info)}.cal-key b{margin-left:6px}
+
 .kinds{flex-wrap:nowrap;overflow-x:auto;max-width:100%}
 .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:6px}
 .gallery .ph{padding:0;border:none;border-radius:6px;overflow:hidden;aspect-ratio:1;background:var(--surface2)}
@@ -141,6 +149,7 @@ code{font-size:13px;background:var(--surface2);padding:1px 5px;border-radius:4px
     <a href="#riepilogo" data-v="riepilogo">Riepilogo</a>
     <a href="#attivita" data-v="attivita">Attività</a>
     <a href="#classifiche" data-v="classifiche">Classifiche</a>
+    <a href="#gruppo" data-v="gruppo">Gruppo</a>
     <a href="#forma" data-v="forma">Forma<span class="wide"> e consigli</span></a>
     <a href="#importa" data-v="importa">Importa</a>
     <a href="#profilo" data-v="profilo">Profilo</a>
@@ -153,6 +162,7 @@ code{font-size:13px;background:var(--surface2);padding:1px 5px;border-radius:4px
   <section class="view" id="v-attivita" hidden></section>
   <section class="view" id="v-dettaglio" hidden></section>
   <section class="view" id="v-classifiche" hidden></section>
+  <section class="view" id="v-gruppo" hidden></section>
   <section class="view" id="v-forma" hidden></section>
   <section class="view" id="v-importa" hidden></section>
   <section class="view" id="v-profilo" hidden></section>
@@ -452,7 +462,7 @@ async function importFiles(files){
   const jobs=[];
   for(const f of files){
     const n=f.name.toLowerCase();
-    if(/\.(json|txt)(\.gz)?$/.test(n)){ try{ const k=await restoreBackup(f); say(`Backup ripristinato: ${k} attività aggiunte.`,'c-good'); }catch(e){ say(`${f.name}: ${e.message}`,'c-bad'); } continue; }
+    if(/\.(json|txt)(\.gz)?$/.test(n)){ try{ const k=await restoreBackup(f); say(typeof k==='string'? k+'.' : `Backup ripristinato: ${k} attività aggiunte.`,'c-good'); }catch(e){ say(`${f.name}: ${e.message}`,'c-bad'); } continue; }
     if(n.endsWith('.zip')){
       if(typeof JSZip==='undefined'){ say(`${f.name}: impossibile aprire lo ZIP (libreria non caricata). Estrai il file e carica la cartella "activities".`,'c-bad'); continue; }
       say(`Apro l'archivio ${f.name}…`);
@@ -853,7 +863,9 @@ function renderRiepilogo(){
       <div class="chart short"><canvas id="ch-mini-fit"></canvas></div>
     </div>
   </div>
+  ${goalsHTML()}
   <div class="panel"><div class="toolbar" style="justify-content:space-between"><h3>Ultime 12 settimane</h3><div class="legend"><span><i style="background:var(--accent)"></i>km</span><span><i style="background:var(--elev)"></i>dislivello (m)</span></div></div><div class="chart"><canvas id="ch-weeks"></canvas></div></div>
+  ${yearCompareHTML()}
   <div class="grid2">
     <div class="panel"><div class="toolbar" style="justify-content:space-between"><h3>Consigli per te</h3><a href="#forma" class="small" style="color:var(--accent)">Tutti i consigli</a></div><div class="advice">${adv.map(advHTML).join('')||'<p class="muted">Servono più uscite per darti consigli.</p>'}</div></div>
     <div class="panel"><h3>Record personali</h3><div class="rec">
@@ -872,6 +884,7 @@ function renderRiepilogo(){
     {label:'Fatica', data:recentF.map(f=>+f.atl.toFixed(1)), borderColor:css('--hr'), borderWidth:1.5}]},
     options:baseOpts({scales:axes({ticks:{color:css('--muted'), maxTicksLimit:4, maxRotation:0}},{ticks:{color:css('--muted'), maxTicksLimit:4}})})});
   const weeks=[]; for(let i=11;i>=0;i--){ const s=weekStart(now)-i*7*DAY; const a=weekAgg(s, s+7*DAY); weeks.push({s, ...a}); }
+  drawYearCompare();
   chart('ch-weeks',{type:'bar', data:{labels:weeks.map(w=>fmtDay(w.s)), datasets:[
     {type:'bar', label:'km', data:weeks.map(w=>+w.km.toFixed(1)), backgroundColor:css('--accent'), borderRadius:4, yAxisID:'y', order:2},
     {type:'line', label:'Dislivello m', data:weeks.map(w=>Math.round(w.gain)), borderColor:css('--elev'), pointRadius:3, pointBackgroundColor:css('--elev'), yAxisID:'y1', order:1}]},
@@ -891,7 +904,7 @@ function renderAttivita(){
   const months=new Map(); for(const a of list){ const k=new Date(a.start).toLocaleDateString('it-IT',{month:'long',year:'numeric'}); if(!months.has(k)) months.set(k,[]); months.get(k).push(a); }
   v.innerHTML=`${exampleBanner()}<div class="toolbar" style="justify-content:space-between"><h1>Attività</h1>
     <div class="toolbar"><input type="search" id="q" placeholder="Cerca per nome" value="${esc(state.q)}" aria-label="Cerca">
-    <select id="flt" aria-label="Sport"><option value="ride"${state.filter==='ride'?' selected':''}>Solo bici</option><option value="all"${state.filter==='all'?' selected':''}>Anche altri sport</option></select></div></div>${kindBar()}
+    <select id="flt" aria-label="Sport"><option value="ride"${state.filter==='ride'?' selected':''}>Solo bici</option><option value="all"${state.filter==='all'?' selected':''}>Anche altri sport</option></select></div></div>${kindBar()}<div id="cal-wrap">${calendarHTML()}</div>
     ${list.length? [...months].map(([m,arr])=>{ const km=arr.reduce((s,a)=>s+a.distance,0)/1000, g=arr.reduce((s,a)=>s+a.gain,0); return `<div class="list"><h3>${esc(m)} · <span class="num">${nf(km)} km · ${nf(g)} m</span></h3>${arr.map(actCard).join('')}</div>`; }).join('') : '<div class="panel empty">Nessuna attività trovata.</div>'}`;
 }
 function zonesHTML(z, names, colorVar){ const tot=z.reduce((a,b)=>a+b,0)||1; return `<div class="zones">${z.map((s,i)=>`<div class="zone"><span>${names[i]}</span><span class="b"><i style="width:${(s/tot*100).toFixed(1)}%;background:var(${colorVar});opacity:${0.35+0.65*(i+1)/z.length}"></i></span><span class="v">${nf(s/tot*100)}% · ${s>=3600?fmtHM(s):Math.round(s/60)+'m'}</span></div>`).join('')}</div>`; }
@@ -937,6 +950,7 @@ function renderDettaglio(){
     ${has('pw')?'<div class="chart short"><canvas id="ch-pw"></canvas></div>':''}
     ${has('cad')?'<div class="chart short"><canvas id="ch-cad"></canvas></div>':''}
   </div>
+  ${(()=>{ const g=groupRides().find(x=>x.a.id===a.id); return g? `<div class="panel"><h3>Con i tuoi amici</h3>${groupTable(a,g.with)}</div>` : ''; })()}
   <div class="panel"><div class="toolbar" style="justify-content:space-between"><h3>Foto</h3><label class="btn" for="ph-add">Aggiungi foto</label><input type="file" id="ph-add" accept="image/*" multiple hidden></div>
     <div class="gallery" id="gallery">${(a.photoIds||[]).length||(a.photoUrls||[]).length? '' : '<p class="small muted">Nessuna foto. Puoi aggiungerle dalla galleria del telefono: restano salvate solo nell\'app.</p>'}</div></div>
   <div class="grid2">
@@ -1077,7 +1091,7 @@ function backupPanelHTML(){
 }
 async function exportBackup(){
   const acts=state.acts.filter(a=>!a.isExample);
-  const json=JSON.stringify({app:'quaderno-pedalate', v:1, created:new Date().toISOString(), profile, acts});
+  const json=JSON.stringify({app:'quaderno-pedalate', v:1, created:new Date().toISOString(), profile, acts, friends:state.friends||[]});
   const d=new Date(), name=`quaderno-pedalate-backup-${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   // Il menu Condividi accetta i file di testo su Android e iPhone; altrimenti si scarica il file compresso.
   const txt=new File([json], name+'.txt', {type:'text/plain'});
@@ -1095,7 +1109,9 @@ async function restoreBackup(file){
   let buf=await file.arrayBuffer();
   if(file.name.toLowerCase().endsWith('.gz')) buf=await gunzip(buf);
   let data; try{ data=JSON.parse(new TextDecoder().decode(buf)); }catch(e){ throw new Error('non è un backup valido'); }
+  if(data.app==='quaderno-pedalate-amico'){ const fr=addFriendData(data); return `Scheda di ${fr.f.name} ${fr.updated?'aggiornata':'aggiunta'} nel Gruppo`; }
   if(data.app!=='quaderno-pedalate' || !Array.isArray(data.acts)) throw new Error('non è un backup di Quaderno Pedalate');
+  if(Array.isArray(data.friends)) for(const f of data.friends){ try{ if(!state.friends.some(x=>x.id===f.id)) addFriendData(Object.assign({app:'quaderno-pedalate-amico'},f)); }catch(e){} }
   if(state.examples){ state.acts=[]; state.examples=false; }
   const have=new Set(state.acts.map(a=>a.id)); let k=0;
   for(const a of data.acts){ if(!a || !a.id || have.has(a.id)) continue; state.acts.push(a); have.add(a.id); await DB.put(a); k++; }
@@ -1105,7 +1121,7 @@ async function restoreBackup(file){
 }
 function bindBackup(){
   const b=$('#b-exp'); if(b) b.onclick=async()=>{ b.disabled=true; $('#b-msg').textContent='Preparo il backup…'; try{ $('#b-msg').textContent=await exportBackup(); }catch(e){ $('#b-msg').textContent='Errore: '+e.message; } b.disabled=false; };
-  const i=$('#b-imp'); if(i) i.onchange=async()=>{ const f=i.files[0]; i.value=''; if(!f) return; $('#b-msg').textContent='Ripristino in corso…'; try{ const k=await restoreBackup(f); store('qp-lastBackup', store('qp-lastBackup')||Date.now()); renderAll(); const m=$('#b-msg'); if(m) m.textContent=`Ripristino completato: ${k} attività aggiunte.`; }catch(e){ $('#b-msg').textContent='Errore: '+e.message; } };
+  const i=$('#b-imp'); if(i) i.onchange=async()=>{ const f=i.files[0]; i.value=''; if(!f) return; $('#b-msg').textContent='Ripristino in corso…'; try{ const k=await restoreBackup(f); if(typeof k!=='string') store('qp-lastBackup', store('qp-lastBackup')||Date.now()); renderAll(); const m=$('#b-msg'); if(m) m.textContent= typeof k==='string'? k+'.' : `Ripristino completato: ${k} attività aggiunte.`; }catch(e){ $('#b-msg').textContent='Errore: '+e.message; } };
 }
 
 /* ====================== collegamento diretto a Strava ====================== */
@@ -1304,12 +1320,15 @@ function renderProfilo(){
         <label>Peso (kg)<input type="number" id="p-weight" min="35" max="160" step="0.5" value="${profile.weight}"></label>
         <label>Sesso<select id="p-sex"><option value="m"${profile.sex==='m'?' selected':''}>Uomo</option><option value="f"${profile.sex==='f'?' selected':''}>Donna</option></select></label>
       </div></div>
+    <div class="panel"><h3>Obiettivi</h3><p class="small muted">Lascia vuoto quello che non ti interessa. Li vedi nel Riepilogo con la barra di avanzamento.</p>
+      <div class="fields">${GOALS.map(x=>`<label>${x.l}<input type="number" id="g-${x.k}" min="0" step="1" placeholder="es. ${({yearKm:3000,yearGain:40000,monthKm:250,weekRides:3})[x.k]}" value="${(profile.goals||{})[x.k]||''}"></label>`).join('')}</div></div>
     <div class="panel"><h3>Dati per l'allenamento</h3><p class="small muted">Servono per zone, calorie e carico. Lascia vuoti FC max e FTP per usare la stima dai tuoi dati.</p>
       <div class="fields">
         <label>FC max (bpm)<input type="number" id="p-hrMax" min="120" max="220" placeholder="stima ${hrMaxEff()}" value="${profile.hrMax||''}"></label>
         <label>FTP (W)<input type="number" id="p-ftp" min="50" max="500" placeholder="${ftpEst()? 'stima '+ftpEst() : 'es. 200'}" value="${profile.ftp||''}"></label>
       </div><p class="small muted" id="p-saved" aria-live="polite"></p>
       <p class="small muted">Nome e foto restano solo su questo telefono (e nel backup su Drive).</p></div>`;
+  for(const x of GOALS) $('#g-'+x.k).onchange=e=>{ profile.goals=profile.goals||{}; const n=+e.target.value; profile.goals[x.k]= n>0? n : null; saveProfile('Obiettivo salvato.'); };
   for(const k of ['first','last']) $('#p-'+k).onchange=e=>{ profile[k]=e.target.value.trim(); saveProfile(); v.querySelector('h1').textContent=fullName()||'Il tuo profilo'; };
   for(const k of ['weight','age','sex','hrMax','ftp']) $('#p-'+k).onchange=e=>{ const x=e.target.value; profile[k]= k==='sex'? x : (x===''? null : +x); if(k==='weight'&&!profile.weight) profile.weight=75; if(k==='age'&&!profile.age) profile.age=45; saveProfile('Profilo salvato. Statistiche aggiornate.'); };
   $('#p-photo').onchange=async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return;
@@ -1318,9 +1337,160 @@ function renderProfilo(){
   const d=$('#p-photo-del'); if(d) d.onclick=()=>{ profile.photo=null; saveProfile('Foto tolta.'); renderProfilo(); };
 }
 
+
+/* ====================== gruppo: confronto con gli amici ====================== */
+const myId = (()=>{ let id=store('qp-myid'); if(!id){ id='u'+Math.random().toString(36).slice(2,10); store('qp-myid',id); } return id; })();
+state.friends = store('qp-friends') || [];
+const saveFriends = () => { try{ localStorage.setItem('qp-friends', JSON.stringify(state.friends)); return true; }catch(e){ return false; } };
+const compact = a => ({s:a.start, k:kindOf(a), d:Math.round(a.distance||0), g:Math.round(a.gain||0), t:Math.round(a.moving||0), p:a.avgPw?Math.round(a.avgPw):null, n:a.np?Math.round(a.np):null, h:a.avgHr?Math.round(a.avgHr):null, c:a.avgCad?Math.round(a.avgCad):null, x:a.maxSpd?+a.maxSpd.toFixed(1):null, b:a.best||null, nm:a.name});
+function me(){ return {id:myId, me:true, name:fullName()||'Io', photo:profile.photo, weight:profile.weight, acts: state.examples? [] : allRides().filter(a=>!a.isExample).map(compact)}; }
+function people(){ return [me(), ...state.friends]; }
+function personAvatar(p, size=32){
+  const ini=(p.name||'?').split(/\s+/).map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
+  return p.photo ? `<img class="avatar" style="width:${size}px;height:${size}px" src="${esc(p.photo)}" alt="">` : `<span class="avatar" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.42)}px">${esc(ini)}</span>`;
+}
+async function shareMyCard(){
+  const card={app:'quaderno-pedalate-amico', v:1, ...me(), me:undefined, updated:Date.now()};
+  if(!card.acts.length) return 'Prima importa le tue uscite: la scheda è vuota.';
+  const slug=(card.name||'ciclista').toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'ciclista';
+  const json=JSON.stringify(card), fname=`scheda-${slug}.txt`;
+  const file=new File([json], fname, {type:'text/plain'});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file], title:'La mia scheda Quaderno Pedalate', text:'Aprila con Quaderno Pedalate → Gruppo → Aggiungi amico'}); return 'Scheda condivisa. Il tuo amico deve aprirla in Gruppo → Aggiungi amico.'; }
+    catch(e){ if(e.name==='AbortError') return 'Condivisione annullata.'; }
+  }
+  const url=URL.createObjectURL(new Blob([json],{type:'text/plain'})), a=document.createElement('a'); a.href=url; a.download=fname; document.body.append(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),10000);
+  return `File ${fname} scaricato: mandalo ai tuoi amici (WhatsApp, email…).`;
+}
+function addFriendData(data){
+  if(!data || data.app!=='quaderno-pedalate-amico' || !Array.isArray(data.acts)) throw new Error('non è una scheda di un amico');
+  if(data.id===myId) throw new Error('questa è la tua scheda: mandala ai tuoi amici');
+  const f={id:String(data.id), name:String(data.name||'Amico').slice(0,60), photo: typeof data.photo==='string' && data.photo.startsWith('data:image/') ? data.photo : null, weight: +data.weight||null, updated:+data.updated||Date.now(),
+    acts:data.acts.filter(a=>a && isFinite(a.s)).map(a=>({s:+a.s, k:['bike','spin'].includes(a.k)?a.k:'bike', d:+a.d||0, g:+a.g||0, t:+a.t||0, p:a.p==null?null:+a.p, n:a.n==null?null:+a.n, h:a.h==null?null:+a.h, c:a.c==null?null:+a.c, x:a.x==null?null:+a.x, b:Array.isArray(a.b)?a.b.map(v=>v==null?null:+v):null, nm:String(a.nm||'').slice(0,120)}))};
+  const i=state.friends.findIndex(x=>x.id===f.id);
+  if(i>=0) state.friends[i]=f; else state.friends.push(f);
+  if(!saveFriends()){ if(i<0) state.friends.pop(); throw new Error('spazio pieno sul telefono'); }
+  return {f, updated:i>=0};
+}
+async function readFriendFile(file){
+  let buf=await file.arrayBuffer(); if(file.name.toLowerCase().endsWith('.gz')) buf=await gunzip(buf);
+  let data; try{ data=JSON.parse(new TextDecoder().decode(buf)); }catch(e){ throw new Error('file non leggibile'); }
+  return addFriendData(data);
+}
+const G_METRICS=[
+  {k:'km', l:'Km', f:v=>nf(v,v<100?1:0)+' km', u:'km', calc:a=>a.reduce((s,x)=>s+x.d,0)/1000},
+  {k:'gain', l:'Dislivello', f:v=>nf(v)+' m', u:'m', calc:a=>a.reduce((s,x)=>s+x.g,0)},
+  {k:'time', l:'Ore in sella', f:v=>fmtHM(v), calc:a=>a.reduce((s,x)=>s+x.t,0), diff:v=>fmtHM(Math.abs(v))},
+  {k:'n', l:'Uscite', f:v=>nf(v), u:'', calc:a=>a.length},
+  {k:'spd', l:'Velocità media', f:v=>nf(v,1)+' km/h', u:'km/h', d:1, calc:a=>{ const o=a.filter(x=>x.k!=='spin'); const t=o.reduce((s,x)=>s+x.t,0); return t? o.reduce((s,x)=>s+x.d,0)/t*3.6 : null; }},
+  {k:'long', l:'Uscita più lunga', f:v=>nf(v,1)+' km', u:'km', d:1, calc:a=>a.length? Math.max(...a.map(x=>x.d))/1000 : null},
+  {k:'climb', l:'Più dislivello in un\'uscita', f:v=>nf(v)+' m', u:'m', calc:a=>a.length? Math.max(...a.map(x=>x.g)) : null},
+  {k:'w20', l:'Potenza 20′ (W/kg)', f:v=>nf(v,2)+' W/kg', u:'W/kg', d:2, calc:(a,p)=>{ const b=Math.max(0,...a.map(x=>x.b&&x.b[7]||0)); return b&&p.weight? b/p.weight : null; }},
+  {k:'w5', l:'Potenza 5′ (W/kg)', f:v=>nf(v,2)+' W/kg', u:'W/kg', d:2, calc:(a,p)=>{ const b=Math.max(0,...a.map(x=>x.b&&x.b[5]||0)); return b&&p.weight? b/p.weight : null; }},
+  {k:'pavg', l:'Potenza media', f:v=>nf(v)+' W', u:'W', calc:a=>{ const o=a.filter(x=>x.p&&x.t); const t=o.reduce((s,x)=>s+x.t,0); return t? o.reduce((s,x)=>s+x.p*x.t,0)/t : null; }}
+];
+function periodStart(p){ const n=new Date(); if(p==='week') return weekStart(Date.now()); if(p==='month') return new Date(n.getFullYear(),n.getMonth(),1).getTime(); if(p==='year') return new Date(n.getFullYear(),0,1).getTime(); return 0; }
+function personActs(p, since){ return p.acts.filter(a=>a.s>=since && (state.kind==='all' || a.k===state.kind)); }
+function fmtDiff(m, d){ if(d==null||!isFinite(d)) return ''; if(Math.abs(d)<1e-9) return 'pari'; const s=d>0?'+':'−'; return s+(m.diff? m.diff(d) : nf(Math.abs(d), m.d||0)+(m.u?' '+m.u:'')); }
+function groupRides(){
+  const mine=state.examples? [] : allRides().filter(a=>!a.isExample), out=[];
+  for(const a of mine){
+    const with_=[];
+    for(const f of state.friends){ const m=f.acts.find(x=>Math.abs(x.s-a.start)<=45*60000 && x.k===kindOf(a)); if(m) with_.push({p:f, a:m}); }
+    if(with_.length) out.push({a, with:with_});
+  }
+  return out;
+}
+function groupTable(a, withList){
+  const rows=[{p:me(), a:compact(a)}, ...withList];
+  const M=[['Distanza',x=>x.d/1000,v=>nf(v,1)+' km',1],['Dislivello',x=>x.g,v=>nf(v)+' m',0],['Tempo in movimento',x=>x.t,v=>fmtDur(v),0,true],['Velocità media',x=>x.t?x.d/x.t*3.6:null,v=>nf(v,1)+' km/h',1],['Velocità max',x=>x.x,v=>nf(v,1)+' km/h',1],['Potenza media',x=>x.p,v=>nf(v)+' W',0],['Potenza normalizzata',x=>x.n,v=>nf(v)+' W',0],['W/kg medi',(x,p)=>x.p&&p.weight?x.p/p.weight:null,v=>nf(v,2),2],['FC media',x=>x.h,v=>nf(v)+' bpm',0],['Cadenza',x=>x.c,v=>nf(v)+' rpm',0]];
+  const used=M.filter(m=>rows.some(r=>m[1](r.a,r.p)!=null));
+  return `<div class="tablewrap"><table class="gt"><thead><tr><th></th>${rows.map(r=>`<th>${personAvatar(r.p,28)}<span>${esc(r.p.me?'Tu':r.p.name.split(' ')[0])}</span></th>`).join('')}</tr></thead><tbody>
+    ${used.map(m=>{ const vals=rows.map(r=>m[1](r.a,r.p)); const best=Math.max(...vals.filter(v=>v!=null)); const mv=vals[0];
+      return `<tr><th>${m[0]}</th>${vals.map((v,i)=>`<td class="${v!=null&&v===best&&vals.filter(x=>x!=null).length>1?'best':''}">${v==null?'–':m[2](v)}${i>0&&v!=null&&mv!=null?`<small>${v-mv===0?'pari':(v>mv?'+':'−')+(m[4]?fmtHM(Math.abs(v-mv)):nf(Math.abs(v-mv),m[3]))}</small>`:''}</td>`).join('')}</tr>`; }).join('')}
+  </tbody></table></div><p class="small muted">In arancione il valore più alto. Sotto ogni amico la differenza rispetto a te.</p>`;
+}
+function renderGruppo(){
+  const v=$('#v-gruppo'); const P=state.gPeriod||'month', since=periodStart(P);
+  const m=G_METRICS.find(x=>x.k===state.gMetric)||G_METRICS[0];
+  const ppl=people().map(p=>({p, v:m.calc(personActs(p,since), p)})).filter(x=>x.v!=null);
+  ppl.sort((a,b)=>b.v-a.v);
+  const meV=(ppl.find(x=>x.p.me)||{}).v;
+  const gr=groupRides().slice(0,8);
+  v.innerHTML=`${exampleBanner()}${kindBar()}<div><h1>Gruppo</h1><p class="muted">Confrontati con gli amici che escono con te. Ognuno ha l'app sul suo telefono e vi scambiate la "scheda" con le uscite.</p></div>
+  <div class="panel"><h3>Come funziona</h3><ol class="steps small"><li>Tocca <b>Condividi la mia scheda</b> e mandala agli amici (WhatsApp va benissimo).</li><li>Loro fanno lo stesso e ti mandano la loro.</li><li>Tu la apri con <b>Aggiungi amico</b>. Per avere i dati aggiornati, scambiatevi la scheda di nuovo (ad esempio la domenica dopo il giro): l'app sostituisce quella vecchia.</li></ol>
+    <div class="toolbar"><button class="primary" id="g-share">Condividi la mia scheda</button><label class="btn" for="g-add">Aggiungi amico</label><input type="file" id="g-add" accept=".txt,.json,text/plain,application/json" multiple hidden></div><p class="small" id="g-msg" aria-live="polite"></p></div>
+  ${state.friends.length? '' : `<div class="panel empty"><p>Non hai ancora aggiunto amici. Quando ricevi la loro scheda, aprila con <b>Aggiungi amico</b>.</p></div>`}
+  <div class="panel"><div class="toolbar" style="justify-content:space-between"><h3>Classifica del gruppo</h3>
+    <div class="seg" role="group" aria-label="Periodo">${[['week','Settimana'],['month','Mese'],['year','Anno'],['all','Sempre']].map(([k,l])=>`<button data-gp="${k}" aria-pressed="${P===k}">${l}</button>`).join('')}</div></div>
+    <div class="chips" role="group" aria-label="Cosa confrontare">${G_METRICS.map(x=>`<button class="chipbtn" data-gm="${x.k}" aria-pressed="${x===m}">${esc(x.l)}</button>`).join('')}</div>
+    <ol class="rank">${ppl.map((x,i)=>`<li><div class="grow ${x.p.me?'me-row':''}"><span class="pos">${i<3&&ppl.length>1? medalSVG(i,26) : `<b>${i+1}</b>`}</span>${personAvatar(x.p,34)}<span class="who"><b>${esc(x.p.me? (x.p.name==='Io'?'Tu':x.p.name+' (tu)') : x.p.name)}</b><small>${x.p.me? 'i tuoi dati' : meV!=null? fmtDiff(m, x.v-meV)+' rispetto a te' : ''}</small></span><span class="val">${m.f(x.v)}</span></div></li>`).join('') || '<li class="muted">Nessun dato in questo periodo.</li>'}</ol>
+    ${m.k.startsWith('w')? '<p class="small muted">Il W/kg usa il peso che ognuno ha inserito nel proprio profilo.</p>' : ''}</div>
+  <div class="panel"><h3>Uscite fatte insieme</h3>${gr.length? gr.map(g=>`<details class="gride"><summary><b>${esc(fmtDate(g.a.start))}</b> · ${esc(g.a.name)} <span class="muted">con ${g.with.map(w=>esc(w.p.name.split(' ')[0])).join(', ')}</span></summary>${groupTable(g.a,g.with)}<p><button data-open="${g.a.id}">Apri l'uscita</button></p></details>`).join('') : '<p class="small muted">Qui compaiono le uscite che tu e un amico avete iniziato alla stessa ora (entro 45 minuti), con il confronto voce per voce.</p>'}</div>
+  ${state.friends.length? `<div class="panel"><h3>I tuoi amici</h3><div class="list">${state.friends.map(f=>`<div class="friend">${personAvatar(f,40)}<div style="min-width:0;flex:1"><b>${esc(f.name)}</b><small class="muted" style="display:block">${f.acts.length} uscite · scheda del ${esc(fmtDate(f.updated))}</small></div><button class="danger" data-fdel="${esc(f.id)}">Togli</button></div>`).join('')}</div></div>` : ''}`;
+  $('#g-share').onclick=async()=>{ $('#g-msg').textContent='Preparo la scheda…'; try{ $('#g-msg').textContent=await shareMyCard(); }catch(e){ $('#g-msg').textContent='Errore: '+e.message; } };
+  $('#g-add').onchange=async e=>{ const fs=[...e.target.files]; e.target.value=''; const msgs=[]; for(const f of fs){ try{ const r=await readFriendFile(f); msgs.push(`${r.f.name}: ${r.updated?'scheda aggiornata':'aggiunto'} (${r.f.acts.length} uscite).`); }catch(err){ msgs.push(`${f.name}: ${err.message}.`); } } renderGruppo(); $('#g-msg').textContent=msgs.join(' '); };
+}
+document.addEventListener('click',e=>{
+  const gp=e.target.closest('[data-gp]'); if(gp){ state.gPeriod=gp.dataset.gp; renderGruppo(); return; }
+  const gm=e.target.closest('[data-gm]'); if(gm){ state.gMetric=gm.dataset.gm; renderGruppo(); return; }
+  const fd=e.target.closest('[data-fdel]'); if(fd){ if(fd.dataset.sure){ state.friends=state.friends.filter(f=>f.id!==fd.dataset.fdel); saveFriends(); renderGruppo(); } else { fd.dataset.sure='1'; fd.textContent='Conferma'; } }
+});
+
+/* ====================== obiettivi ====================== */
+const GOALS=[
+  {k:'yearKm', l:'Km nell\'anno', unit:'km', per:'year', calc:a=>a.reduce((s,x)=>s+x.distance,0)/1000},
+  {k:'yearGain', l:'Dislivello nell\'anno', unit:'m', per:'year', calc:a=>a.reduce((s,x)=>s+x.gain,0)},
+  {k:'monthKm', l:'Km nel mese', unit:'km', per:'month', calc:a=>a.reduce((s,x)=>s+x.distance,0)/1000},
+  {k:'weekRides', l:'Uscite a settimana', unit:'uscite', per:'week', calc:a=>a.length}
+];
+function goalsHTML(){
+  const g=profile.goals||{}, set=GOALS.filter(x=>g[x.k]>0);
+  if(!set.length) return `<div class="panel"><h3>Obiettivi</h3><p class="small muted">Imposta un obiettivo (ad esempio 3.000 km quest'anno) e qui vedi a che punto sei.</p><p><button data-go="profilo">Imposta obiettivi</button></p></div>`;
+  const now=new Date(), r=allRides().filter(a=>!a.isExample || state.examples);
+  return `<div class="panel"><div class="toolbar" style="justify-content:space-between"><h3>Obiettivi</h3><a data-go="profilo" class="small" style="color:var(--accent);cursor:pointer">Modifica</a></div><div class="goals">${set.map(x=>{
+    const since=periodStart(x.per), val=x.calc(r.filter(a=>a.start>=since)), goal=g[x.k], pct=Math.min(1,val/goal);
+    let end, len; if(x.per==='year'){ end=new Date(now.getFullYear()+1,0,1); len=end-new Date(now.getFullYear(),0,1); } else if(x.per==='month'){ end=new Date(now.getFullYear(),now.getMonth()+1,1); len=end-new Date(now.getFullYear(),now.getMonth(),1); } else { end=new Date(weekStart(Date.now())+7*DAY); len=7*DAY; }
+    const elapsed=Math.max(0.02,(Date.now()-since)/len), proj=val/elapsed;
+    const ok=val>=goal, onTrack=proj>=goal;
+    return `<div class="goal"><div class="toolbar" style="justify-content:space-between"><b>${x.l}</b><span class="num">${nf(val)} / ${nf(goal)} ${x.unit}</span></div><span class="bar"><i style="width:${(pct*100).toFixed(1)}%"></i><em style="left:${Math.min(100,elapsed*100).toFixed(1)}%"></em></span>
+      <small class="${ok?'c-good':onTrack?'c-good':'c-warn'}">${ok? 'Obiettivo raggiunto!' : x.per==='week'? `Ne mancano ${nf(goal-val)} entro domenica.` : onTrack? `Sei in linea: a questo ritmo arrivi a circa ${nf(proj)} ${x.unit}.` : `Sei un po' indietro: a questo ritmo arrivi a ${nf(proj)} ${x.unit}. Ti servono ${nf((goal-val)/Math.max(1,(end-Date.now())/(7*DAY)),x.unit==='km'?0:0)} ${x.unit} a settimana.`}</small></div>`; }).join('')}</div></div>`;
+}
+
+/* ====================== quest'anno e l'anno scorso ====================== */
+function yearCompareHTML(){ return `<div class="panel"><div class="toolbar" style="justify-content:space-between"><h3>Quest'anno e l'anno scorso</h3><div class="legend"><span><i style="background:var(--accent)"></i>${new Date().getFullYear()}</span><span><i style="background:var(--muted)"></i>${new Date().getFullYear()-1}</span></div></div><p class="small" id="yc-txt"></p><div class="chart"><canvas id="ch-year"></canvas></div></div>`; }
+function drawYearCompare(){
+  const y=new Date().getFullYear(), r=cycling();
+  const cum=yy=>{ const s=new Date(yy,0,1).getTime(), days=Math.round((new Date(yy+1,0,1)-s)/DAY), arr=new Array(days).fill(0); for(const a of r){ if(a.start>=s && a.start<s+days*DAY) arr[Math.floor((dayStart(a.start)-s)/DAY+0.01)]+=a.distance/1000; } let t=0; return arr.map(x=>t+=x); };
+  const cur=cum(y), prev=cum(y-1), doy=Math.floor((dayStart(Date.now())-new Date(y,0,1))/DAY+0.01);
+  const now=cur[doy]||0, then=prev[Math.min(doy,prev.length-1)]||0;
+  const t=$('#yc-txt'); if(t) t.innerHTML= then? `Ad oggi <b>${nf(now)} km</b>: ${now>=then?'+':'−'}${nf(Math.abs(now-then))} km rispetto allo stesso giorno del ${y-1} (${nf(then)} km).` : `Ad oggi <b>${nf(now)} km</b> nel ${y}. Del ${y-1} non ci sono uscite da confrontare.`;
+  const labels=prev.map((_,i)=>{ const d=new Date(y,0,1+i); return d.getDate()===1? d.toLocaleDateString('it-IT',{month:'short'}) : ''; });
+  chart('ch-year',{type:'line', data:{labels, datasets:[
+    {label:String(y-1), data:prev, borderColor:css('--muted'), borderWidth:1.5, borderDash:[4,3]},
+    {label:String(y), data:cur.slice(0,doy+1), borderColor:css('--accent'), backgroundColor:alpha(css('--accent'),.12), fill:true}]},
+    options:baseOpts({scales:axes({ticks:{color:css('--muted'), autoSkip:false, maxRotation:0, callback:(v,i)=>labels[i]||null}, grid:{display:false}},{ticks:{color:css('--muted'), callback:v=>nf(v)+' km'}}), plugins:{legend:{display:false}, tooltip:{callbacks:{title:it=>new Date(y,0,1+it[0].dataIndex).toLocaleDateString('it-IT',{day:'numeric',month:'long'}), label:it=>it.dataset.label+': '+nf(it.parsed.y)+' km'}}}})});
+}
+
+/* ====================== calendario ====================== */
+function calendarHTML(){
+  const base=state.calMonth? new Date(state.calMonth) : new Date(); const y=base.getFullYear(), mo=base.getMonth();
+  const first=new Date(y,mo,1), days=new Date(y,mo+1,0).getDate(), lead=(first.getDay()+6)%7;
+  const acts=cycling().filter(a=>{ const d=new Date(a.start); return d.getFullYear()===y && d.getMonth()===mo; });
+  const byDay={}; for(const a of acts){ const d=new Date(a.start).getDate(); (byDay[d]=byDay[d]||[]).push(a); }
+  const km=acts.reduce((s,a)=>s+a.distance,0)/1000, today=new Date();
+  let cells=''; for(let i=0;i<lead;i++) cells+='<span></span>';
+  for(let d=1; d<=days; d++){ const L=byDay[d]||[], isT=today.getFullYear()===y&&today.getMonth()===mo&&today.getDate()===d;
+    cells+= L.length? `<button class="cal-d has${isT?' today':''}" data-open="${L[0].id}" title="${esc(L.map(a=>a.name).join(', '))}"><span>${d}</span><i>${L.map(a=>`<b class="${kindOf(a)}"></b>`).join('')}</i><small>${nf(L.reduce((s,a)=>s+a.distance,0)/1000)}</small></button>` : `<span class="cal-d${isT?' today':''}"><span>${d}</span></span>`; }
+  return `<div class="panel"><div class="toolbar" style="justify-content:space-between"><button data-cal="-1" aria-label="Mese precedente">‹</button><h3 style="text-transform:capitalize">${first.toLocaleDateString('it-IT',{month:'long',year:'numeric'})}</h3><button data-cal="1" aria-label="Mese successivo">›</button></div>
+    <p class="small muted" style="text-align:center">${acts.length} uscite · ${nf(km)} km · ${nf(acts.reduce((s,a)=>s+a.gain,0))} m · <span class="cal-key"><b class="bike"></b> bici <b class="spin"></b> spinning</span></p>
+    <div class="cal"><span class="wd">L</span><span class="wd">M</span><span class="wd">M</span><span class="wd">G</span><span class="wd">V</span><span class="wd">S</span><span class="wd">D</span>${cells}</div></div>`;
+}
+document.addEventListener('click',e=>{ const c=e.target.closest('[data-cal]'); if(c){ const b=state.calMonth? new Date(state.calMonth) : new Date(); state.calMonth=new Date(b.getFullYear(), b.getMonth()+(+c.dataset.cal), 1).getTime(); const p=$('#cal-wrap'); if(p) p.innerHTML=calendarHTML(); } });
+
 /* ====================== navigazione ====================== */
-const VIEWS=['riepilogo','attivita','classifiche','forma','importa','profilo'];
-const RENDER={riepilogo:renderRiepilogo, attivita:renderAttivita, dettaglio:renderDettaglio, classifiche:renderClassifiche, forma:renderForma, importa:renderImporta, profilo:renderProfilo};
+const VIEWS=['riepilogo','attivita','classifiche','gruppo','forma','importa','profilo'];
+const RENDER={riepilogo:renderRiepilogo, attivita:renderAttivita, dettaglio:renderDettaglio, classifiche:renderClassifiche, gruppo:renderGruppo, forma:renderForma, importa:renderImporta, profilo:renderProfilo};
 function show(view){
   renderMe();
   state.view=view;
