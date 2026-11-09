@@ -1269,7 +1269,7 @@ function stravaPanelHTML(){
     <details class="small"><summary>Hai autorizzato Strava ma sei finito nel browser invece che nell'app?</summary><p>Copia l'indirizzo della pagina in cui sei arrivato (contiene <code>code=</code>) e incollalo qui: <input type="text" id="s-paste" placeholder="https://…?code=…" style="width:100%"></p><button id="s-paste-ok">Completa collegamento</button></details>`;
   const q=STRAVA.queue.length;
   return `<div class="toolbar" style="justify-content:space-between"><h3>Strava collegato</h3><span class="chip c-good">${esc(STRAVA.athlete&&STRAVA.athlete.name||'Account collegato')}</span></div>
-    <p class="small">${STRAVA.lastSync? 'Ultimo controllo: '+esc(fmtDate(STRAVA.lastSync))+' alle '+fmtTime(STRAVA.lastSync)+'.' : 'Non hai ancora scaricato attività.'}${q? ` <b>${q}</b> attività in coda.` : ''} Le nuove uscite si scaricano da sole quando apri l'app.</p>
+    <p class="small">${STRAVA.lastSync? 'Ultimo controllo: '+esc(fmtDate(STRAVA.lastSync))+' alle '+fmtTime(STRAVA.lastSync)+'.' : 'Non hai ancora scaricato attività.'}${q? ` <b>${q}</b> attività in coda.` : ''} Le nuove uscite arrivano da sole ogni volta che apri l'app.</p>
     <div class="toolbar">
       <button class="primary" id="s-new" ${state.syncing?'disabled':''}>Scarica nuove attività</button>
       <button id="s-all" ${state.syncing?'disabled':''}>Scarica tutto lo storico</button>
@@ -1332,11 +1332,16 @@ try{ const mq=matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('c
   try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
   const back=await stravaHandleRedirect();
   const h=location.hash.slice(1); show(back? 'importa' : VIEWS.includes(h)? h : 'riepilogo');
-  if(!back && !EMBEDDED && STRAVA.refresh && (STRAVA.queue.length || Date.now()-(STRAVA.lastSync||0)>3*3600000)) stravaSync('new');
+  const autoSync=()=>{ if(!EMBEDDED && STRAVA.refresh && navigator.onLine!==false && (STRAVA.queue.length || Date.now()-(STRAVA.lastSync||0)>5*60000)) stravaSync('new'); };
+  if(!back) autoSync();
+  // ogni volta che riapri l'app (o torni su di essa) controlla se ci sono uscite nuove su Strava
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') autoSync(); });
+  window.addEventListener('online', autoSync);
+  setInterval(()=>{ if(document.visibilityState==='visible') autoSync(); }, 15*60000);
 })();
 </script>
 <script>
-window.APP_VERSION='202611091955';
+window.APP_VERSION='202611091957';
 if('serviceWorker' in navigator && location.protocol==='https:'){
   const had=!!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js?v='+APP_VERSION).then(reg=>{
