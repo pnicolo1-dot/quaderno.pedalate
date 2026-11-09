@@ -831,6 +831,7 @@ function renderImporta(){
   </div>
   <div class="panel" id="install-panel">${installPanelHTML()}</div>
   <div class="panel"><h3>Dati salvati</h3><p class="small">${state.examples? 'Al momento vedi solo dati di esempio: spariranno quando importi la prima attività.' : `${state.acts.length} attività salvate in questo browser.`}</p>
+    <p class="small muted">Versione dell'app: ${esc(window.APP_VERSION||'anteprima')}. Gli aggiornamenti arrivano da soli: quando ce n'è uno nuovo compare il pulsante "Aggiorna".</p>
     <div class="toolbar">${state.examples?'':'<button class="danger" id="wipe">Elimina tutte le attività</button>'}<span id="wipec" hidden><span class="small">Sicuro? Non si può annullare. </span><button class="danger" id="wipe-yes">Sì, elimina tutto</button> <button id="wipe-no">Annulla</button></span></div></div>`;
   const inp=$('#file'), drop=$('#drop');
   inp.onchange=()=>{ importFiles([...inp.files]); inp.value=''; };
@@ -1115,6 +1116,24 @@ try{ const mq=matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('c
   if(!back && !EMBEDDED && STRAVA.refresh && (STRAVA.queue.length || Date.now()-(STRAVA.lastSync||0)>3*3600000)) stravaSync('new');
 })();
 </script>
-<script>if('serviceWorker' in navigator && location.protocol==='https:'){navigator.serviceWorker.register('sw.js?v=202611081152');}</script>
+<script>
+window.APP_VERSION='202611091913';
+if('serviceWorker' in navigator && location.protocol==='https:'){
+  const had=!!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js?v='+APP_VERSION).then(reg=>{
+    document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') reg.update().catch(()=>{}); });
+  }).catch(()=>{});
+  let reloaded=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(!had||reloaded) return; reloaded=true;
+    const t=document.createElement('div');
+    t.setAttribute('role','status');
+    t.style.cssText='position:fixed;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:20;background:var(--accent);color:var(--on-accent);padding:12px 14px;border-radius:10px;font-weight:600;display:flex;gap:12px;align-items:center;justify-content:space-between;box-shadow:0 4px 18px rgba(0,0,0,.3)';
+    t.innerHTML='<span>Nuova versione disponibile</span><button style="background:var(--surface);color:var(--fg);border:none">Aggiorna</button>';
+    t.querySelector('button').onclick=()=>location.reload();
+    document.body.append(t);
+  });
+}
+</script>
 </body>
 </html>

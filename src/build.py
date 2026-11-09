@@ -21,7 +21,25 @@ src=src.replace('<meta name="claude:viewport-fit-sides" content="cover">\n','')
 out=head+src.replace('<header class="top">','</head>\n<body>\n<header class="top">',1)
 out=out.replace('</script>\n','</script>\n',)
 out=out.rstrip()+'''
-<script>if('serviceWorker' in navigator && location.protocol==='https:'){navigator.serviceWorker.register('sw.js?v=%s');}</script>
+<script>
+window.APP_VERSION='%s';
+if('serviceWorker' in navigator && location.protocol==='https:'){
+  const had=!!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js?v='+APP_VERSION).then(reg=>{
+    document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') reg.update().catch(()=>{}); });
+  }).catch(()=>{});
+  let reloaded=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(!had||reloaded) return; reloaded=true;
+    const t=document.createElement('div');
+    t.setAttribute('role','status');
+    t.style.cssText='position:fixed;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:20;background:var(--accent);color:var(--on-accent);padding:12px 14px;border-radius:10px;font-weight:600;display:flex;gap:12px;align-items:center;justify-content:space-between;box-shadow:0 4px 18px rgba(0,0,0,.3)';
+    t.innerHTML='<span>Nuova versione disponibile</span><button style="background:var(--surface);color:var(--fg);border:none">Aggiorna</button>';
+    t.querySelector('button').onclick=()=>location.reload();
+    document.body.append(t);
+  });
+}
+</script>
 </body>
 </html>
 ''' % ver
