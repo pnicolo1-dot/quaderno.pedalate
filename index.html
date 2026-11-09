@@ -37,6 +37,10 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background
 .bar{display:flex;align-items:center;gap:16px;padding-block:10px;flex-wrap:wrap}
 .brand{font-family:var(--f-display);font-weight:700;font-size:22px;letter-spacing:.02em;display:flex;align-items:center;gap:8px;margin-right:auto}
 .brand svg{width:26px;height:26px;color:var(--accent)}
+.me{color:var(--fg);text-decoration:none;min-width:0}.me .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.avatar{width:38px;height:38px;border-radius:50%;flex:none;object-fit:cover;background:var(--accent);color:var(--on-accent);display:inline-flex;align-items:center;justify-content:center;font-family:var(--f-display);font-weight:700;font-size:17px;border:2px solid var(--accent)}
+.avatar.big{width:110px;height:110px;font-size:42px;border-width:3px}
+.prof-head{display:flex;gap:18px;align-items:center;flex-wrap:wrap}
 nav.tabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
 nav.tabs a{font-family:var(--f-display);font-weight:600;font-size:16px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:999px;white-space:nowrap}
 nav.tabs a[aria-current="page"]{background:var(--accent);color:var(--on-accent)}
@@ -148,13 +152,14 @@ code{font-size:13px;background:var(--surface2);padding:1px 5px;border-radius:4px
 </head>
 <body>
 <header class="top"><div class="wrap bar">
-  <div class="brand"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="21" r="5.5"/><circle cx="25" cy="21" r="5.5"/><path d="M7 21l5-10h9l4 10M12 11l4 10h3M14 7h4"/></svg>Quaderno Pedalate</div>
+  <a class="brand me" href="#profilo" id="me" aria-label="Il tuo profilo"></a>
   <nav class="tabs" aria-label="Sezioni">
     <a href="#riepilogo" data-v="riepilogo">Riepilogo</a>
     <a href="#attivita" data-v="attivita">Attività</a>
     <a href="#classifiche" data-v="classifiche">Classifiche</a>
     <a href="#forma" data-v="forma">Forma<span class="wide"> e consigli</span></a>
     <a href="#importa" data-v="importa">Importa</a>
+    <a href="#profilo" data-v="profilo">Profilo</a>
   </nav>
   <button class="primary" id="install" hidden>Installa app</button>
 </div></header>
@@ -166,6 +171,7 @@ code{font-size:13px;background:var(--surface2);padding:1px 5px;border-radius:4px
   <section class="view" id="v-classifiche" hidden></section>
   <section class="view" id="v-forma" hidden></section>
   <section class="view" id="v-importa" hidden></section>
+  <section class="view" id="v-profilo" hidden></section>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
@@ -218,7 +224,7 @@ const DB = {
 };
 
 /* ====================== profilo atleta ====================== */
-const profile = Object.assign({weight:75, age:45, sex:'m', hrMax:null, ftp:null}, store('qp-profile')||{});
+const profile = Object.assign({first:'', last:'', photo:null, weight:75, age:45, sex:'m', hrMax:null, ftp:null}, store('qp-profile')||{});
 const SPIN_RE=/spin|cyclette|rulli|indoor|trainer|zwift|virtual/i;
 function kindOf(a){
   if(a.sport==='ride'){ if(a.sub==='indoor'||a.sub==='virtual'||a.indoor||SPIN_RE.test(a.name||'')||!(a.track&&a.track.length>1)) return 'spin'; return 'bike'; }
@@ -1037,14 +1043,7 @@ function renderImporta(){
       <li>Entro qualche ora arriva un'email con il link a un file <b>.zip</b>: scaricalo e trascinalo qui così com'è.</li></ol>
       <p class="small muted">L'app legge nomi e tipo di attività dal file activities.csv dell'archivio e scarta i doppioni. Se lo ZIP è molto grande (con molte foto) conviene farlo da PC, oppure estrarlo e caricare solo i file della cartella "activities".</p>
       <h3>Una sola attività</h3><p class="small">Su strava.com apri l'attività → menu <b>⋯</b> → <b>Esporta file originale</b> (FIT, il più completo) o <b>Esporta GPX</b>. Da Garmin Connect: attività → ⚙ → <b>Esporta originale</b>.</p></div>
-    <div class="panel"><h3>Il tuo profilo</h3><p class="small muted">Serve per zone, calorie e carico. Lascia vuoti FC max e FTP per usare la stima dai tuoi dati.</p>
-      <div class="fields">
-        <label>Peso (kg)<input type="number" id="p-weight" min="35" max="160" step="0.5" value="${profile.weight}"></label>
-        <label>Età<input type="number" id="p-age" min="12" max="95" value="${profile.age}"></label>
-        <label>Sesso<select id="p-sex"><option value="m"${profile.sex==='m'?' selected':''}>Uomo</option><option value="f"${profile.sex==='f'?' selected':''}>Donna</option></select></label>
-        <label>FC max (bpm)<input type="number" id="p-hrMax" min="120" max="220" placeholder="stima ${hrMaxEff()}" value="${profile.hrMax||''}"></label>
-        <label>FTP (W)<input type="number" id="p-ftp" min="50" max="500" placeholder="${ftpEst()? 'stima '+ftpEst() : 'es. 200'}" value="${profile.ftp||''}"></label>
-      </div><p class="small muted" id="p-saved" aria-live="polite"></p></div>
+    <div class="panel"><h3>Il tuo profilo</h3><p class="small">Nome, foto, età, peso, FC max e FTP si impostano nella sezione Profilo.</p><p><button class="primary" data-go="profilo">Apri il profilo</button></p></div>
   </div>
   <div class="panel" id="install-panel">${installPanelHTML()}</div>
   <div class="panel"><h3>Dati salvati</h3><p class="small">${state.examples? 'Al momento vedi solo dati di esempio: spariranno quando importi la prima attività.' : `${state.acts.length} attività salvate in questo browser.`}</p>
@@ -1055,7 +1054,7 @@ function renderImporta(){
   drop.addEventListener('dragover',e=>{ e.preventDefault(); drop.classList.add('over'); });
   drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
   drop.addEventListener('drop',e=>{ e.preventDefault(); drop.classList.remove('over'); importFiles([...e.dataTransfer.files]); });
-  for(const k of ['weight','age','sex','hrMax','ftp']){ $('#p-'+k).onchange=e=>{ const x=e.target.value; profile[k]= k==='sex'? x : (x===''? null : +x); if(k==='weight'&&!profile.weight) profile.weight=75; if(k==='age'&&!profile.age) profile.age=45; store('qp-profile',profile); recompute(); $('#p-saved').textContent='Profilo salvato. Statistiche aggiornate.'; }; }
+  if(false) for(const k of []){ $('#p-'+k).onchange=e=>{ const x=e.target.value; profile[k]= k==='sex'? x : (x===''? null : +x); if(k==='weight'&&!profile.weight) profile.weight=75; if(k==='age'&&!profile.age) profile.age=45; store('qp-profile',profile); recompute(); $('#p-saved').textContent='Profilo salvato. Statistiche aggiornate.'; }; }
   bindStrava(); bindBackup();
   const w=$('#wipe'); if(w){ w.onclick=()=>{ $('#wipec').hidden=false; w.hidden=true; }; $('#wipe-no').onclick=()=>{ $('#wipec').hidden=true; w.hidden=false; }; $('#wipe-yes').onclick=async()=>{ await DB.clear(); await DB.mClear(); state.acts=makeExamples(); state.examples=true; recompute(); go('riepilogo'); }; }
 }
@@ -1116,7 +1115,7 @@ async function restoreBackup(file){
   if(state.examples){ state.acts=[]; state.examples=false; }
   const have=new Set(state.acts.map(a=>a.id)); let k=0;
   for(const a of data.acts){ if(!a || !a.id || have.has(a.id)) continue; state.acts.push(a); have.add(a.id); await DB.put(a); k++; }
-  if(data.profile && !store('qp-profile')){ Object.assign(profile, data.profile); store('qp-profile', profile); }
+  if(data.profile && (!store('qp-profile') || !(profile.first||profile.photo))){ Object.assign(profile, data.profile); store('qp-profile', profile); renderMe(); }
   state.acts.sort((a,b)=>b.start-a.start); recompute();
   return k;
 }
@@ -1300,10 +1299,46 @@ function bindStrava(){
   const o=$('#s-off'); if(o) o.onclick=()=>{ Object.assign(STRAVA,{access:null, refresh:null, expiresAt:0, athlete:null, queue:[]}); saveStrava(); clearTimeout(state.syncTimer); setSync(''); refreshStravaPanel(); };
 }
 
+
+/* ====================== profilo e avatar ====================== */
+const fullName = () => [profile.first, profile.last].filter(Boolean).join(' ');
+const initials = () => ((profile.first||'')[0]||'') + ((profile.last||'')[0]||'');
+function avatarHTML(big){ return profile.photo ? `<img class="avatar${big?' big':''}" src="${profile.photo}" alt="">` : `<span class="avatar${big?' big':''}" aria-hidden="true">${esc(initials().toUpperCase()) || '<svg viewBox="0 0 24 24" width="60%" height="60%" fill="currentColor"><circle cx="12" cy="8" r="4.2"/><path d="M3.5 21c.8-4.4 4.3-7 8.5-7s7.7 2.6 8.5 7z"/></svg>'}</span>`; }
+function renderMe(){ const m=$('#me'); if(m) m.innerHTML=`${avatarHTML(false)}<span class="nm">${esc(fullName()||'Quaderno Pedalate')}</span>`; }
+function saveProfile(msg){ store('qp-profile',profile); recompute(); renderMe(); const el=$('#p-saved'); if(el) el.textContent=msg||'Profilo salvato.'; }
+function renderProfilo(){
+  const v=$('#v-profilo'), r=allRides().filter(a=>!a.isExample);
+  const km=r.reduce((s,a)=>s+a.distance,0)/1000, g=r.reduce((s,a)=>s+a.gain,0);
+  v.innerHTML=`<div class="panel"><div class="prof-head">${avatarHTML(true)}<div style="min-width:0"><h1>${esc(fullName()||'Il tuo profilo')}</h1>
+      <p class="muted">${r.length} uscite · ${nf(km)} km · ${nf(g)} m di dislivello</p>
+      <div class="toolbar" style="margin-top:10px"><label class="btn" for="p-photo">${profile.photo?'Cambia foto':'Aggiungi foto'}</label><input type="file" id="p-photo" accept="image/*" hidden>${profile.photo?'<button id="p-photo-del">Togli foto</button>':''}</div></div></div></div>
+    <div class="panel"><h3>Dati personali</h3>
+      <div class="fields">
+        <label>Nome<input type="text" id="p-first" autocomplete="given-name" value="${esc(profile.first)}"></label>
+        <label>Cognome<input type="text" id="p-last" autocomplete="family-name" value="${esc(profile.last)}"></label>
+        <label>Età<input type="number" id="p-age" min="12" max="95" value="${profile.age}"></label>
+        <label>Peso (kg)<input type="number" id="p-weight" min="35" max="160" step="0.5" value="${profile.weight}"></label>
+        <label>Sesso<select id="p-sex"><option value="m"${profile.sex==='m'?' selected':''}>Uomo</option><option value="f"${profile.sex==='f'?' selected':''}>Donna</option></select></label>
+      </div></div>
+    <div class="panel"><h3>Dati per l'allenamento</h3><p class="small muted">Servono per zone, calorie e carico. Lascia vuoti FC max e FTP per usare la stima dai tuoi dati.</p>
+      <div class="fields">
+        <label>FC max (bpm)<input type="number" id="p-hrMax" min="120" max="220" placeholder="stima ${hrMaxEff()}" value="${profile.hrMax||''}"></label>
+        <label>FTP (W)<input type="number" id="p-ftp" min="50" max="500" placeholder="${ftpEst()? 'stima '+ftpEst() : 'es. 200'}" value="${profile.ftp||''}"></label>
+      </div><p class="small muted" id="p-saved" aria-live="polite"></p>
+      <p class="small muted">Nome e foto restano solo su questo telefono (e nel backup su Drive).</p></div>`;
+  for(const k of ['first','last']) $('#p-'+k).onchange=e=>{ profile[k]=e.target.value.trim(); saveProfile(); v.querySelector('h1').textContent=fullName()||'Il tuo profilo'; };
+  for(const k of ['weight','age','sex','hrMax','ftp']) $('#p-'+k).onchange=e=>{ const x=e.target.value; profile[k]= k==='sex'? x : (x===''? null : +x); if(k==='weight'&&!profile.weight) profile.weight=75; if(k==='age'&&!profile.age) profile.age=45; saveProfile('Profilo salvato. Statistiche aggiornate.'); };
+  $('#p-photo').onchange=async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return;
+    try{ const bmp=await createImageBitmap(f); const S=320, k=S/Math.min(bmp.width,bmp.height), c=document.createElement('canvas'); c.width=S; c.height=S; const w=bmp.width*k, h=bmp.height*k; c.getContext('2d').drawImage(bmp,(S-w)/2,(S-h)/2,w,h); profile.photo=c.toDataURL('image/jpeg',0.85); saveProfile('Foto salvata.'); renderProfilo(); }
+    catch(err){ const el=$('#p-saved'); if(el) el.textContent='Questa foto non si riesce a leggere: prova con un\'altra (JPG o PNG).'; } };
+  const d=$('#p-photo-del'); if(d) d.onclick=()=>{ profile.photo=null; saveProfile('Foto tolta.'); renderProfilo(); };
+}
+
 /* ====================== navigazione ====================== */
-const VIEWS=['riepilogo','attivita','classifiche','forma','importa'];
-const RENDER={riepilogo:renderRiepilogo, attivita:renderAttivita, dettaglio:renderDettaglio, classifiche:renderClassifiche, forma:renderForma, importa:renderImporta};
+const VIEWS=['riepilogo','attivita','classifiche','forma','importa','profilo'];
+const RENDER={riepilogo:renderRiepilogo, attivita:renderAttivita, dettaglio:renderDettaglio, classifiche:renderClassifiche, forma:renderForma, importa:renderImporta, profilo:renderProfilo};
 function show(view){
+  renderMe();
   state.view=view;
   for(const id of [...VIEWS,'dettaglio']) $('#v-'+id).hidden = id!==view;
   document.querySelectorAll('nav.tabs a').forEach(a=>a.setAttribute('aria-current', (a.dataset.v===view || (view==='dettaglio'&&a.dataset.v==='attivita'))? 'page':'false'));
@@ -1341,7 +1376,7 @@ try{ const mq=matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('c
 })();
 </script>
 <script>
-window.APP_VERSION='202611092001';
+window.APP_VERSION='202611092003';
 if('serviceWorker' in navigator && location.protocol==='https:'){
   const had=!!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js?v='+APP_VERSION).then(reg=>{
