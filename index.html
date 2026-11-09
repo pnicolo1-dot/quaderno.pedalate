@@ -42,6 +42,15 @@ nav.tabs a{font-family:var(--f-display);font-weight:600;font-size:16px;letter-sp
 nav.tabs a[aria-current="page"]{background:var(--accent);color:var(--on-accent)}
 nav.tabs a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 main{padding-block:20px 60px}
+.act .medals svg,.medals svg{width:18px;height:18px}
+.medals{display:inline-flex;align-items:center;gap:1px;margin-right:6px;vertical-align:-4px}.medals b{font-size:12px;color:var(--muted);margin-left:2px}
+.podium-sum{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.podium-sum>div{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--surface2);border-radius:8px;padding:10px 4px}.podium-sum .num{font-size:28px}.podium-sum small{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}.chipbtn{white-space:nowrap;font-size:13px;padding:6px 12px;border-radius:999px;background:var(--surface2);border:1px solid var(--line)}.chipbtn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+ol.rank{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}ol.rank button{width:100%;display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;text-align:left;background:var(--surface2);border:1px solid transparent;font-weight:400;padding:8px 10px}ol.rank button:hover{border-color:var(--accent)}ol.rank .pos{display:flex;justify-content:center;font-family:var(--f-display);font-size:20px;color:var(--muted)}ol.rank .who{min-width:0;display:flex;flex-direction:column}ol.rank .who b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}ol.rank .who small{color:var(--muted);font-size:12px}ol.rank .val{font-family:var(--f-display);font-size:21px;font-weight:600;font-variant-numeric:tabular-nums}
+.cups{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr));gap:10px}.cup{display:grid;grid-template-columns:40px 1fr;gap:10px;align-items:start;padding:10px;border-radius:8px;background:var(--surface2);opacity:.6}.cup.on{opacity:1}.cup b{display:block}.cup small{display:block;color:var(--muted);font-size:12px}.cup a{color:var(--accent);cursor:pointer;text-decoration:none}.cup .bar{display:block;height:5px;border-radius:3px;background:var(--line);margin:5px 0 2px;overflow:hidden}.cup .bar i{display:block;height:100%;background:var(--accent)}
+.achv{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,230px),1fr));gap:10px}.achv>div{display:flex;gap:10px;align-items:center}.achv b{display:block}.achv small{color:var(--muted);font-size:13px}
+@media (max-width:560px){.podium-sum .num{font-size:22px}}
+
 #install{padding:6px 12px}
 button[disabled]{opacity:.55;cursor:default}
 .codebox{font-family:ui-monospace,monospace;font-size:13px;word-break:break-all;background:var(--surface2);padding:8px 10px;border-radius:6px;user-select:all}
@@ -122,7 +131,7 @@ ol.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
 .empty{padding:30px 10px;text-align:center;color:var(--muted)}
 code{font-size:13px;background:var(--surface2);padding:1px 5px;border-radius:4px}
-@media (max-width:560px){nav.tabs{width:100%;justify-content:space-between}nav.tabs a{padding:6px 10px;font-size:15px}.wide{display:none}h1{font-size:28px}.form-cards .fc .val{font-size:26px}.zone{grid-template-columns:92px 1fr 84px}.stat .val{font-size:24px}}
+@media (max-width:560px){nav.tabs{width:100%;justify-content:flex-start}nav.tabs a{padding:6px 9px;font-size:14px}.wide{display:none}h1{font-size:28px}.form-cards .fc .val{font-size:26px}.zone{grid-template-columns:92px 1fr 84px}.stat .val{font-size:24px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
@@ -133,6 +142,7 @@ code{font-size:13px;background:var(--surface2);padding:1px 5px;border-radius:4px
   <nav class="tabs" aria-label="Sezioni">
     <a href="#riepilogo" data-v="riepilogo">Riepilogo</a>
     <a href="#attivita" data-v="attivita">Attività</a>
+    <a href="#classifiche" data-v="classifiche">Classifiche</a>
     <a href="#forma" data-v="forma">Forma<span class="wide"> e consigli</span></a>
     <a href="#importa" data-v="importa">Importa</a>
   </nav>
@@ -143,6 +153,7 @@ code{font-size:13px;background:var(--surface2);padding:1px 5px;border-radius:4px
   <section class="view" id="v-riepilogo"></section>
   <section class="view" id="v-attivita" hidden></section>
   <section class="view" id="v-dettaglio" hidden></section>
+  <section class="view" id="v-classifiche" hidden></section>
   <section class="view" id="v-forma" hidden></section>
   <section class="view" id="v-importa" hidden></section>
 </main>
@@ -161,7 +172,7 @@ const PZ_N = ['Z1 Recupero','Z2 Resistenza','Z3 Tempo','Z4 Soglia','Z5 VO2max','
 const SPORT_L = {ride:'Ciclismo', run:'Corsa', walk:'Camminata', other:'Altro'};
 const SUB_L = {mtb:'MTB', gravel:'Gravel', virtual:'Virtuale', road:'Strada', indoor:'Indoor'};
 const DAY = 86400000;
-const state = { log:[], acts:[], examples:false, view:'riepilogo', sel:null, charts:{}, fitness:[], range:90, filter:'ride', q:'' };
+const state = { medals:{}, rkCat:'dist', rkPeriod:'sempre', log:[], acts:[], examples:false, view:'riepilogo', sel:null, charts:{}, fitness:[], range:90, filter:'ride', q:'' };
 
 /* ====================== utilità ====================== */
 const $ = s => document.querySelector(s);
@@ -515,6 +526,7 @@ function makeExamples(){
 /* ====================== forma fisica (CTL / ATL / TSB) ====================== */
 function recompute(){
   const acts=state.acts; state.fitness=[];
+  computeMedals();
   if(!acts.length) return;
   const byDay=new Map(); for(const a of acts){ const k=dayKey(a.start); byDay.set(k,(byDay.get(k)||0)+tss(a)); }
   const first=new Date(dayStart(Math.min(...acts.map(a=>a.start)))); const end=dayStart(Date.now());
@@ -615,7 +627,7 @@ function loadLeaflet(){
   if(leafletP) return leafletP;
   leafletP=new Promise((res,rej)=>{
     const css=document.createElement('link'); css.rel='stylesheet'; css.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'; document.head.append(css);
-    const js=document.createElement('script'); js.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'; js.onload=()=>res(); js.onerror=()=>{ leafletP=null; rej(new Error('mappa non caricata')); }; document.head.append(js);
+    const js=document.createElement('script'); js.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'; js.onload=()=>window.L? res() : (leafletP=null, rej(new Error('mappa non caricata'))); js.onerror=()=>{ leafletP=null; rej(new Error('mappa non caricata')); }; document.head.append(js);
   });
   return leafletP;
 }
@@ -640,6 +652,105 @@ async function initMap(a){
   map.fitBounds(line.getBounds(),{padding:[24,24]});
   setTimeout(()=>map.invalidateSize(),150);
 }
+
+
+/* ====================== classifiche personali, medaglie e coppe ====================== */
+const MEDAL_C=['#f5c242','#c9ced4','#d08a4a'];
+const MEDAL_N=['Oro','Argento','Bronzo'];
+const pwBest=w=>a=>{ const i=WINDOWS.indexOf(w); return a.best && a.best[i] ? a.best[i] : null; };
+const CATS=[
+  {k:'dist', l:'Uscita più lunga', short:'distanza', v:a=>a.distance/1000, f:v=>nf(v,1)+' km'},
+  {k:'gain', l:'Più dislivello', short:'dislivello', v:a=>a.gain||null, f:v=>nf(v)+' m'},
+  {k:'time', l:'Più tempo in sella', short:'tempo in sella', v:a=>a.moving||null, f:v=>fmtDur(v)},
+  {k:'spd', l:'Velocità media (oltre 20 km)', short:'velocità media', v:a=>a.distance>20000 && a.avgSpd ? a.avgSpd : null, f:v=>nf(v,1)+' km/h'},
+  {k:'climb', l:'Più dislivello per km (oltre 10 km)', short:'pendenza media', v:a=>a.distance>10000 && a.gain>200 ? a.gain/(a.distance/1000) : null, f:v=>nf(v,1)+' m/km'},
+  {k:'alt', l:'Altitudine massima', short:'altitudine', v:a=>a.maxAlt, f:v=>nf(v)+' m'},
+  {k:'p5', l:'Potenza migliore 5 secondi', short:'potenza 5″', v:pwBest(5), f:v=>v+' W'},
+  {k:'p60', l:'Potenza migliore 1 minuto', short:'potenza 1′', v:pwBest(60), f:v=>v+' W'},
+  {k:'p300', l:'Potenza migliore 5 minuti', short:'potenza 5′', v:pwBest(300), f:v=>v+' W'},
+  {k:'p1200', l:'Potenza migliore 20 minuti', short:'potenza 20′', v:pwBest(1200), f:v=>v+' W'},
+  {k:'p3600', l:'Potenza migliore 1 ora', short:'potenza 1h', v:pwBest(3600), f:v=>v+' W'},
+  {k:'kj', l:'Più lavoro (kJ)', short:'lavoro', v:a=>a.avgPw && a.pwSec ? a.avgPw*a.pwSec/1000 : null, f:v=>nf(v)+' kJ'},
+  {k:'tss', l:'Uscita più impegnativa (TSS)', short:'carico', v:a=>tss(a), f:v=>nf(v)+' TSS'}
+];
+function ranking(cat, since=0, n=10){
+  return cycling().filter(a=>a.start>=since).map(a=>({a, v:cat.v(a)})).filter(x=>x.v!=null && isFinite(x.v) && x.v>0).sort((x,y)=>y.v-x.v).slice(0,n);
+}
+// medaglie: posizione 1-3 di sempre e 1-3 dell'anno dell'uscita
+function computeMedals(){
+  state.medals={};
+  const add=(id,m)=>(state.medals[id]=state.medals[id]||[]).push(m);
+  const years=[...new Set(cycling().map(a=>new Date(a.start).getFullYear()))];
+  for(const c of CATS){
+    ranking(c,0,3).forEach((x,i)=>add(x.a.id,{c, rank:i, scope:'sempre'}));
+    for(const y of years){
+      const from=new Date(y,0,1).getTime(), to=new Date(y+1,0,1).getTime();
+      cycling().filter(a=>a.start>=from&&a.start<to).map(a=>({a,v:c.v(a)})).filter(x=>x.v!=null&&isFinite(x.v)&&x.v>0).sort((p,q)=>q.v-p.v).slice(0,3)
+        .forEach((x,i)=>{ if(!(state.medals[x.a.id]||[]).some(m=>m.c===c)) add(x.a.id,{c, rank:i, scope:String(y)}); });
+    }
+  }
+  for(const id in state.medals) state.medals[id].sort((p,q)=>(p.scope==='sempre'?0:1)-(q.scope==='sempre'?0:1) || p.rank-q.rank);
+}
+function medalSVG(rank, size=22){
+  const c=MEDAL_C[rank];
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-label="Medaglia ${MEDAL_N[rank]}" role="img"><path d="M7 2h4l2 6H9z" fill="#3d7bd9"/><path d="M13 2h4l-2 6h-4z" fill="#d94a3d"/><circle cx="12" cy="15" r="7" fill="${c}"/><circle cx="12" cy="15" r="4.6" fill="none" stroke="rgba(0,0,0,.25)" stroke-width="1.2"/><text x="12" y="17.6" text-anchor="middle" font-size="7.5" font-weight="700" fill="rgba(0,0,0,.6)" font-family="sans-serif">${rank+1}</text></svg>`;
+}
+function cupSVG(on, size=40){
+  const c=on? '#f5c242' : 'var(--line)', s=on? '#b8892a' : 'var(--muted)';
+  return `<svg width="${size}" height="${size}" viewBox="0 0 40 40" aria-hidden="true"><path d="M12 6h16v8a8 8 0 0 1-16 0z" fill="${c}" stroke="${s}" stroke-width="1.5"/><path d="M12 9H7a5 5 0 0 0 6 7M28 9h5a5 5 0 0 1-6 7" fill="none" stroke="${s}" stroke-width="2"/><rect x="18" y="22" width="4" height="6" fill="${c}" stroke="${s}" stroke-width="1.2"/><rect x="12" y="28" width="16" height="5" rx="1.5" fill="${c}" stroke="${s}" stroke-width="1.2"/></svg>`;
+}
+function medalLabel(m){ return `${m.rank+1}° ${m.scope==='sempre'? 'di sempre' : 'del '+m.scope} · ${m.c.short}`; }
+function medalsRow(a, max=3){
+  const ms=(state.medals||{})[a.id]; if(!ms||!ms.length) return '';
+  return `<span class="medals" title="${esc(ms.map(medalLabel).join(', '))}">${ms.slice(0,max).map(m=>medalSVG(m.rank,18)).join('')}${ms.length>max?`<b>+${ms.length-max}</b>`:''}</span>`;
+}
+// coppe: traguardi di una singola uscita e totali
+function trophies(){
+  const r=cycling(), y0=new Date(new Date().getFullYear(),0,1).getTime();
+  const first=(f)=>{ let b=null; for(const a of r) if(f(a) && (!b||a.start<b.start)) b=a; return b; };
+  const single=(id,l,d,f)=>{ const a=first(f); return {id,l,d,on:!!a,a}; };
+  const sumBy=(arr,f)=>arr.reduce((s,a)=>s+f(a),0);
+  const yr=r.filter(a=>a.start>=y0), kmY=sumBy(yr,a=>a.distance/1000), gY=sumBy(yr,a=>a.gain), kmAll=sumBy(r,a=>a.distance/1000);
+  const months=new Map(); for(const a of r){ const k=new Date(a.start).getFullYear()*12+new Date(a.start).getMonth(); months.set(k,(months.get(k)||0)+a.gain); }
+  const bestMonth=Math.max(0,...months.values());
+  const tot=(id,l,d,val,goal,unit)=>({id,l,d,on:val>=goal,prog:Math.min(1,val/goal),txt:`${nf(Math.min(val,goal))} / ${nf(goal)} ${unit}`});
+  return [
+    single('d50','Mezzo centinaio','Un\'uscita di almeno 50 km',a=>a.distance>=50000),
+    single('d100','Centenario','Un\'uscita di almeno 100 km',a=>a.distance>=100000),
+    single('g1000','Mille metri','Almeno 1.000 m di dislivello in un\'uscita',a=>a.gain>=1000),
+    single('g1500','Scalatore','Almeno 1.500 m di dislivello in un\'uscita',a=>a.gain>=1500),
+    single('g2000','Re della montagna','Almeno 2.000 m di dislivello in un\'uscita',a=>a.gain>=2000),
+    single('t4h','Fondista','Almeno 4 ore in movimento',a=>a.moving>=4*3600),
+    single('a1000','Sopra le nuvole','Superare i 1.000 m di altitudine',a=>a.maxAlt>=1000),
+    tot('y1000','1.000 km quest\'anno','Totale dall\'1 gennaio',kmY,1000,'km'),
+    tot('y5000','5.000 km quest\'anno','Totale dall\'1 gennaio',kmY,5000,'km'),
+    tot('gy25','25.000 m quest\'anno','Dislivello dall\'1 gennaio',gY,25000,'m'),
+    tot('ev','Everest in un mese','8.849 m di dislivello nello stesso mese',bestMonth,8849,'m'),
+    tot('k10','10.000 km in carriera','Tutte le uscite importate',kmAll,10000,'km')
+  ];
+}
+function renderClassifiche(){
+  const v=$('#v-classifiche');
+  if(!cycling().length){ v.innerHTML='<div class="panel empty">Importa qualche uscita per vedere le classifiche.</div>'; return; }
+  const since = state.rkPeriod==='anno' ? new Date(new Date().getFullYear(),0,1).getTime() : state.rkPeriod==='90' ? Date.now()-90*DAY : 0;
+  const cat=CATS.find(c=>c.k===state.rkCat)||CATS[0];
+  const list=ranking(cat, since, 10);
+  const tr=trophies(), won=tr.filter(t=>t.on).length;
+  let g=0,s=0,b=0; for(const id in state.medals||{}) for(const m of state.medals[id]) if(m.scope==='sempre'){ if(m.rank===0) g++; else if(m.rank===1) s++; else b++; }
+  const cats=CATS.filter(c=>ranking(c,0,1).length);
+  v.innerHTML=`${exampleBanner()}<div><h1>Classifiche</h1><p class="muted">Le tue uscite messe a confronto tra loro: medaglie ai primi tre posti e coppe per i traguardi raggiunti.</p></div>
+  <div class="panel"><h3>Medagliere di sempre</h3><div class="podium-sum">
+    <div>${medalSVG(0,34)}<span class="num">${g}</span><small>ori</small></div><div>${medalSVG(1,34)}<span class="num">${s}</span><small>argenti</small></div><div>${medalSVG(2,34)}<span class="num">${b}</span><small>bronzi</small></div><div>${cupSVG(true,34)}<span class="num">${won}/${tr.length}</span><small>coppe</small></div></div></div>
+  <div class="panel"><div class="toolbar" style="justify-content:space-between"><h3>Classifica</h3>
+    <div class="seg" role="group" aria-label="Periodo">${[['sempre','Sempre'],['anno','Quest\'anno'],['90','90 giorni']].map(([k,l])=>`<button data-rkp="${k}" aria-pressed="${(state.rkPeriod||'sempre')===k}">${l}</button>`).join('')}</div></div>
+    <div class="chips" role="group" aria-label="Categoria">${cats.map(c=>`<button class="chipbtn" data-rkc="${c.k}" aria-pressed="${c===cat}">${esc(c.l)}</button>`).join('')}</div>
+    <ol class="rank">${list.map((x,i)=>`<li><button data-open="${x.a.id}"><span class="pos">${i<3? medalSVG(i,26) : `<b>${i+1}</b>`}</span><span class="who"><b>${esc(x.a.name)}</b><small>${esc(fmtDate(x.a.start))}</small></span><span class="val">${cat.f(x.v)}</span></button></li>`).join('') || '<li class="muted">Nessuna uscita in questo periodo.</li>'}</ol></div>
+  <div class="panel"><h3>Bacheca delle coppe</h3><div class="cups">${tr.map(t=>`<div class="cup ${t.on?'on':''}">${cupSVG(t.on)}<div style="min-width:0"><b>${esc(t.l)}</b><small>${esc(t.d)}</small>${t.a?`<a data-open="${t.a.id}" class="small">${esc(fmtDay(t.a.start))} · ${esc(t.a.name)}</a>`:''}${t.prog!=null?`<span class="bar"><i style="width:${(t.prog*100).toFixed(0)}%"></i></span><small>${t.txt}</small>`:''}${!t.on&&t.prog==null?'<small>Ancora da conquistare</small>':''}</div></div>`).join('')}</div></div>`;
+}
+document.addEventListener('click',e=>{
+  const p=e.target.closest('[data-rkp]'); if(p){ state.rkPeriod=p.dataset.rkp; renderClassifiche(); return; }
+  const c=e.target.closest('[data-rkc]'); if(c){ state.rkCat=c.dataset.rkc; renderClassifiche(); }
+});
 
 /* ====================== viste ====================== */
 function exampleBanner(){ return state.examples ? `<div class="banner"><p><b>Stai guardando dati di esempio</b> (12 settimane di uscite simulate). Importa i tuoi file FIT/GPX/TCX o l'archivio di Strava per vedere le tue statistiche.</p><button class="primary" data-go="importa">Importa le mie attività</button></div>` : ''; }
@@ -707,7 +818,7 @@ function renderRiepilogo(){
 function advHTML(a){ return `<div class="adv c-${a.c}"><span class="dot"></span><div><b style="color:var(--fg)">${esc(a.t)}</b><p>${esc(a.p)}</p></div></div>`; }
 function actCard(a){
   return `<button class="act" data-open="${a.id}">${routeSVG(a.track,70,56,true)}<div style="min-width:0">
-    <div class="t">${esc(a.name)}${a.isExample?'<span class="tag ex">esempio</span>':''}${a.sub&&SUB_L[a.sub]?`<span class="tag">${SUB_L[a.sub]}</span>`:''}${a.sport!=='ride'?`<span class="tag">${SPORT_L[a.sport]}</span>`:''}</div>
+    <div class="t">${medalsRow(a)}${esc(a.name)}${a.isExample?'<span class="tag ex">esempio</span>':''}${a.sub&&SUB_L[a.sub]?`<span class="tag">${SUB_L[a.sub]}</span>`:''}${a.sport!=='ride'?`<span class="tag">${SPORT_L[a.sport]}</span>`:''}</div>
     <div class="m">${esc(fmtDate(a.start))} · ${fmtTime(a.start)}</div>
     <div class="k"><span>${nf(a.distance/1000,1)}<small>km</small></span><span>${nf(a.gain)}<small>m D+</small></span><span>${fmtDur(a.moving)}</span>${a.avgPw?`<span>${nf(a.avgPw)}<small>W</small></span>`:''}${a.avgHr?`<span>${nf(a.avgHr)}<small>bpm</small></span>`:''}</div></div></button>`;
 }
@@ -742,6 +853,7 @@ function renderDettaglio(){
   const has=f=>hasProf && a.prof[f].some(x=>x!=null&&x>0);
   v.innerHTML=`<div><button class="back" data-go="attivita">← Tutte le attività</button></div>
   <div><p class="muted">${esc(fmtDate(a.start))} alle ${fmtTime(a.start)} · ${esc(a.source||'')}${a.sub&&SUB_L[a.sub]?' · '+SUB_L[a.sub]:''}</p><h1>${esc(a.name)}${a.isExample?'<span class="tag ex">esempio</span>':''}</h1></div>
+  ${(state.medals[a.id]||[]).length?`<div class="panel"><h3>Risultati</h3><div class="achv">${state.medals[a.id].map(m=>`<div>${medalSVG(m.rank,30)}<span><b>${m.rank+1}° ${m.scope==='sempre'?'di sempre':'del '+m.scope}</b><small>${esc(m.c.l)} · ${m.c.f(m.c.v(a))}</small></span></div>`).join('')}</div></div>`:''}
   <div class="grid2">
     <div class="panel">${!EMBEDDED && a.track && a.track.length>1 ? `<div id="lmap" class="lmap" role="region" aria-label="Mappa del percorso"></div>` : routeSVG(a.track,600,400,false)}</div>
     <div class="panel"><div class="stats">
@@ -1112,8 +1224,8 @@ function bindStrava(){
 }
 
 /* ====================== navigazione ====================== */
-const VIEWS=['riepilogo','attivita','forma','importa'];
-const RENDER={riepilogo:renderRiepilogo, attivita:renderAttivita, dettaglio:renderDettaglio, forma:renderForma, importa:renderImporta};
+const VIEWS=['riepilogo','attivita','classifiche','forma','importa'];
+const RENDER={riepilogo:renderRiepilogo, attivita:renderAttivita, dettaglio:renderDettaglio, classifiche:renderClassifiche, forma:renderForma, importa:renderImporta};
 function show(view){
   state.view=view;
   for(const id of [...VIEWS,'dettaglio']) $('#v-'+id).hidden = id!==view;
@@ -1147,7 +1259,7 @@ try{ const mq=matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('c
 })();
 </script>
 <script>
-window.APP_VERSION='202611091921';
+window.APP_VERSION='202611091923';
 if('serviceWorker' in navigator && location.protocol==='https:'){
   const had=!!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js?v='+APP_VERSION).then(reg=>{
