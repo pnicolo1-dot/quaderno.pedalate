@@ -9,8 +9,8 @@ head='''<!DOCTYPE html>
 <meta name="theme-color" content="#121212">
 <meta name="description" content="Statistiche, forma fisica e consigli per le tue uscite in bici.">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon-192.png" type="image/png">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png?v=ldm" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=ldm">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -56,9 +56,9 @@ open('manifest.webmanifest','w').write('''{
   "background_color": "#121212",
   "theme_color": "#121212",
   "icons": [
-    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
-    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
-    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+    {"src": "icon-192.png?v=ldm", "sizes": "192x192", "type": "image/png"},
+    {"src": "icon-512.png?v=ldm", "sizes": "512x512", "type": "image/png"},
+    {"src": "icon-maskable-512.png?v=ldm", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
   ]
 }
 ''')
