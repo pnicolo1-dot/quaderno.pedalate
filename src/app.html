@@ -5,30 +5,21 @@
 <style>
 /* Layout: app a schede, cruscotto "da manubrio": numeri condensati grandi, etichette piccole, grafici a tutta larghezza */
 :root{
-  --bg:#f3f5f3; --surface:#ffffff; --surface2:#e9eeeb; --line:#d6ddd9; --fg:#14201b; --muted:#5a6a63;
-  --accent:#a65f00; --accent-soft:#f6e3c4; --on-accent:#ffffff;
-  --elev:#6f8b80; --hr:#d23c3c; --pw:#7a4cdc; --spd:#0b7fbb; --cad:#1d8f55;
-  --good:#1d8f55; --warn:#b85c00; --bad:#c62f2f; --info:#0b7fbb;
+  /* Tema scuro in stile Strava: nero, grigi caldi, arancione */
+  --bg:#121212; --surface:#1e1e1e; --surface2:#2a2a2a; --line:#333333; --fg:#ffffff; --muted:#a8a8a8;
+  --accent:#fc5200; --accent-soft:#3a1c0c; --on-accent:#ffffff;
+  --elev:#9a9a9a; --hr:#ff4d4d; --pw:#b592ff; --spd:#3db8ff; --cad:#43d18a;
+  --good:#43d18a; --warn:#ffa23a; --bad:#ff4d4d; --info:#3db8ff;
   --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
   --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
-  --r:10px;
+  --r:10px; color-scheme:dark;
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0f1312; --surface:#171d1b; --surface2:#1f2724; --line:#2b3531; --fg:#e8eeeb; --muted:#93a29b;
-  --accent:#ffb020; --accent-soft:#3a2c10; --on-accent:#1b1200;
-  --elev:#86a196; --hr:#ff6262; --pw:#b592ff; --spd:#4cc3ff; --cad:#5ad69a;
-  --good:#45d391; --warn:#ff9a3d; --bad:#ff6262; --info:#4cc3ff; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#0f1312; --surface:#171d1b; --surface2:#1f2724; --line:#2b3531; --fg:#e8eeeb; --muted:#93a29b;
-  --accent:#ffb020; --accent-soft:#3a2c10; --on-accent:#1b1200;
-  --elev:#86a196; --hr:#ff6262; --pw:#b592ff; --spd:#4cc3ff; --cad:#5ad69a;
-  --good:#45d391; --warn:#ff9a3d; --bad:#ff6262; --info:#4cc3ff; color-scheme:dark}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5}
-body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
 .wrap{max-width:1080px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
 .bar{display:flex;align-items:center;gap:16px;padding-block:10px;flex-wrap:wrap}
 .brand{font-family:var(--f-display);font-weight:700;font-size:22px;letter-spacing:.02em;display:flex;align-items:center;gap:8px;margin-right:auto}
 .brand svg{width:26px;height:26px;color:var(--accent)}
@@ -627,7 +618,7 @@ async function initMap(a){
   L.control.layers(layers,null,{position:'topright'}).addTo(map);
   map.on('baselayerchange',e=>{ try{ localStorage.setItem('qp-maplayer',e.name); }catch(_){} });
   L.polyline(a.track,{color:'#ffffff', weight:7, opacity:.85}).addTo(map);
-  const line=L.polyline(a.track,{color:'#f26a10', weight:4, opacity:1}).addTo(map);
+  const line=L.polyline(a.track,{color:'#fc5200', weight:4, opacity:1}).addTo(map);
   L.circleMarker(a.track[0],{radius:7, color:'#ffffff', weight:2, fillColor:'#1d8f55', fillOpacity:1}).addTo(map).bindTooltip('Partenza');
   L.circleMarker(a.track[a.track.length-1],{radius:7, color:'#ffffff', weight:2, fillColor:'#14201b', fillOpacity:1}).addTo(map).bindTooltip('Arrivo');
   map.fitBounds(line.getBounds(),{padding:[24,24]});
