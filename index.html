@@ -182,7 +182,7 @@ const PZ_N = ['Z1 Recupero','Z2 Resistenza','Z3 Tempo','Z4 Soglia','Z5 VO2max','
 const SPORT_L = {ride:'Ciclismo', run:'Corsa', walk:'Camminata', other:'Altro'};
 const SUB_L = {mtb:'MTB', gravel:'Gravel', virtual:'Virtuale', road:'Strada', indoor:'Indoor'};
 const DAY = 86400000;
-const state = { kind:(store('qp-kind')||'all'), medals:{}, rkCat:'dist', rkPeriod:'sempre', log:[], acts:[], examples:false, view:'riepilogo', sel:null, charts:{}, fitness:[], range:90, filter:'ride', q:'' };
+const state = { kind:(['all','bike','spin'].includes(store('qp-kind'))? store('qp-kind') : 'all'), medals:{}, rkCat:'dist', rkPeriod:'sempre', log:[], acts:[], examples:false, view:'riepilogo', sel:null, charts:{}, fitness:[], range:90, filter:'ride', q:'' };
 
 /* ====================== utilità ====================== */
 const $ = s => document.querySelector(s);
@@ -221,11 +221,11 @@ const DB = {
 const profile = Object.assign({weight:75, age:45, sex:'m', hrMax:null, ftp:null}, store('qp-profile')||{});
 const SPIN_RE=/spin|cyclette|rulli|indoor|trainer|zwift|virtual/i;
 function kindOf(a){
-  if(a.sport==='ride'){ if(a.sub==='indoor'||a.sub==='virtual'||a.indoor||SPIN_RE.test(a.name||'')||!(a.track&&a.track.length>1)) return 'spin'; if(a.sub==='mtb'||a.sub==='gravel') return 'mtb'; return 'road'; }
+  if(a.sport==='ride'){ if(a.sub==='indoor'||a.sub==='virtual'||a.indoor||SPIN_RE.test(a.name||'')||!(a.track&&a.track.length>1)) return 'spin'; return 'bike'; }
   if(a.sport==='other' && SPIN_RE.test(a.name||'')) return 'spin';
   return 'other';
 }
-const KINDS=[['all','Tutte'],['road','Strada'],['mtb','MTB'],['spin','Spinning']];
+const KINDS=[['all','Tutte'],['bike','Bici'],['spin','Spinning']];
 const allRides = () => state.acts.filter(a=>kindOf(a)!=='other');
 const cycling = () => allRides().filter(a=>state.kind==='all' || kindOf(a)===state.kind);
 function kindBar(){ return `<div class="seg kinds" role="group" aria-label="Tipo di uscita">${KINDS.map(([k,l])=>`<button data-kind="${k}" aria-pressed="${state.kind===k}">${l}</button>`).join('')}</div>`; }
@@ -1341,7 +1341,7 @@ try{ const mq=matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('c
 })();
 </script>
 <script>
-window.APP_VERSION='202611091957';
+window.APP_VERSION='202611092001';
 if('serviceWorker' in navigator && location.protocol==='https:'){
   const had=!!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js?v='+APP_VERSION).then(reg=>{
