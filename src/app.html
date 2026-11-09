@@ -143,6 +143,28 @@ ol.steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 code{font-size:13px;background:var(--surface2);padding:1px 5px;border-radius:4px}
 @media (max-width:560px){nav.tabs{width:100%;justify-content:flex-start}nav.tabs a{padding:6px 9px;font-size:14px}.wide{display:none}h1{font-size:28px}.form-cards .fc .val{font-size:26px}.zone{grid-template-columns:92px 1fr 84px}.stat .val{font-size:24px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+#fly{position:fixed;inset:0;z-index:2000;background:#000;color:#fff}
+#fly-map{position:absolute;inset:0}
+.fly-top{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:calc(env(safe-area-inset-top) + 10px) 12px 24px;background:linear-gradient(rgba(0,0,0,.65),transparent);pointer-events:none}
+.fly-top>*{pointer-events:auto}.fly-top b{display:block;font-size:16px}.fly-top small{color:#ddd}
+.fly-top button{background:rgba(0,0,0,.5);color:#fff;border-color:rgba(255,255,255,.3);min-width:44px;min-height:44px}
+.fly-hud{position:absolute;left:12px;top:calc(env(safe-area-inset-top) + 64px);display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.fly-hud div{background:rgba(0,0,0,.55);border-radius:8px;padding:4px 10px;min-width:92px}
+.fly-hud small{display:block;font-size:11px;color:#ccc}.fly-hud b{font-size:18px;font-variant-numeric:tabular-nums}.fly-hud i{font-style:normal;font-size:12px;color:#ccc;margin-left:3px}
+.fly-msg{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);background:rgba(0,0,0,.7);padding:10px 16px;border-radius:10px;text-align:center;max-width:86vw}
+.fly-out{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+.fly-bar{position:absolute;left:0;right:0;bottom:0;padding:24px 12px calc(env(safe-area-inset-bottom) + 12px);background:linear-gradient(transparent,rgba(0,0,0,.75))}
+.fly-bar input{width:100%;accent-color:#fc5200}
+.fly-btns{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.fly-btns button{min-height:44px}.fly-btns>button:not(.primary){background:rgba(0,0,0,.5);color:#fff;border-color:rgba(255,255,255,.3)}
+#fly-play{min-width:56px;font-size:18px}
+.fly-dot{width:18px;height:18px;border-radius:50%;background:#fc5200;border:3px solid #fff;box-shadow:0 0 0 4px rgba(252,82,0,.35),0 2px 6px rgba(0,0,0,.5)}
+.fly-open{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:10px}
+#fly .maplibregl-ctrl-attrib{font-size:10px}
+#fly .maplibregl-ctrl-bottom-right{bottom:calc(env(safe-area-inset-bottom) + 140px)}
+.fly-btns .seg button{padding:8px 9px}.fly-btns{flex-wrap:nowrap}
+.fly-out a{text-decoration:none}
+.fly-top,.fly-bar,.fly-msg{z-index:3}
 </style>
 
 <header class="top"><div class="wrap bar">
@@ -681,6 +703,162 @@ async function initMap(a){
   setTimeout(()=>map.invalidateSize(),150);
 }
 
+/* ====================== replay 3D del percorso (satellite + rilievo) ====================== */
+let mlP=null;
+function loadMapLibre(){
+  if(window.maplibregl) return Promise.resolve();
+  if(mlP) return mlP;
+  mlP=new Promise((res,rej)=>{
+    const css=document.createElement('link'); css.rel='stylesheet'; css.href='https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css'; document.head.append(css);
+    const js=document.createElement('script'); js.src='https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js';
+    js.onload=()=>window.maplibregl? res() : (mlP=null, rej(new Error('3D non caricato'))); js.onerror=()=>{ mlP=null; rej(new Error('3D non caricato')); }; document.head.append(js);
+  });
+  return mlP;
+}
+const FLY={};
+function flyStop(){ FLY.cancel=true; if(FLY.raf) cancelAnimationFrame(FLY.raf); FLY.raf=0; if(FLY.rec&&FLY.rec.state!=='inactive') try{FLY.rec.stop();}catch(e){} if(FLY.map) try{FLY.map.remove();}catch(e){} FLY.map=null; const o=$('#fly'); if(o) o.remove(); document.body.style.overflow=''; }
+function bearingDeg(p,q){ const r=Math.PI/180, y=Math.sin((q[1]-p[1])*r)*Math.cos(q[0]*r), x=Math.cos(p[0]*r)*Math.sin(q[0]*r)-Math.sin(p[0]*r)*Math.cos(q[0]*r)*Math.cos((q[1]-p[1])*r); return (Math.atan2(y,x)/r+360)%360; }
+function flyAt(dist){ // posizione interpolata a una distanza (m) lungo la traccia
+  const T=FLY.tr, C=FLY.cum; let lo=0, hi=C.length-1;
+  if(dist<=0) return T[0]; if(dist>=C[hi]) return T[hi];
+  while(hi-lo>1){ const m=(lo+hi)>>1; if(C[m]<=dist) lo=m; else hi=m; }
+  const f=(dist-C[lo])/((C[hi]-C[lo])||1); return [T[lo][0]+(T[hi][0]-T[lo][0])*f, T[lo][1]+(T[hi][1]-T[lo][1])*f];
+}
+function flyProf(frac){ const P=FLY.a.prof; if(!P||!P.d||P.d.length<2) return null; const km=frac*P.d[P.d.length-1]; let i=0; while(i<P.d.length-1 && P.d[i]<km) i++; return {km, alt:P.alt[i], hr:P.hr[i], spd:P.spd[i], pw:P.pw[i], t:P.t? P.t[i] : null}; }
+async function openFly(a){
+  flyStop(); FLY.cancel=false;
+  const o=document.createElement('div'); o.id='fly'; o.setAttribute('role','dialog'); o.setAttribute('aria-label','Percorso in 3D');
+  o.innerHTML=`<div id="fly-map"></div>
+    <div class="fly-top"><div><b>${esc(a.name)}</b><small>${esc(fmtDay(a.start))}</small></div><button id="fly-x" aria-label="Chiudi">✕</button></div>
+    <div class="fly-hud" id="fly-hud"></div>
+    <div class="fly-msg" id="fly-msg">Carico satellite e rilievo…</div>
+    <div class="fly-bar">
+      <input type="range" id="fly-pos" min="0" max="1000" value="0" aria-label="Posizione">
+      <div class="fly-btns"><button id="fly-play" class="primary" aria-label="Avvia">▶</button>
+        <div class="seg" role="group" aria-label="Velocità">${[[0.5,'½×'],[1,'1×'],[2,'2×'],[4,'4×']].map(([v,l])=>`<button data-fsp="${v}" aria-pressed="${v===1}">${l}</button>`).join('')}</div>
+        <button id="fly-view" aria-label="Cambia inquadratura" title="Cambia inquadratura">🎥</button>
+        <button id="fly-rec">⏺ Video</button></div>
+    </div>`;
+  document.body.append(o); document.body.style.overflow='hidden';
+  $('#fly-x').onclick=flyStop;
+  try{ await loadMapLibre(); }catch(e){ $('#fly-msg').textContent='Il 3D ha bisogno di internet: riprova quando sei connesso.'; return; }
+  if(!document.body.contains(o)) return;
+  const tr=a.track.filter(p=>p&&isFinite(p[0])&&isFinite(p[1]));
+  const cum=[0]; for(let i=1;i<tr.length;i++) cum.push(cum[i-1]+hav(tr[i-1][0],tr[i-1][1],tr[i][0],tr[i][1]));
+  Object.assign(FLY,{a, tr, cum, len:cum[cum.length-1]||1, pos:0, playing:false, speed:1, view:0, brg:null, last:0});
+  // durata a 1×: ~25 s + 1,2 s per km, al massimo 2 minuti e mezzo
+  FLY.dur=Math.min(150, 25+FLY.len/1000*1.2)*1000;
+  const ll=tr.map(p=>[p[1],p[0]]);
+  const map=new maplibregl.Map({container:'fly-map', attributionControl:{compact:true}, preserveDrawingBuffer:true, maxPitch:80, pitch:60, center:ll[0], zoom:14,
+    style:{version:8, sources:{
+      sat:{type:'raster', tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'], tileSize:256, maxzoom:19, attribution:'© Esri, Maxar, Earthstar Geographics'},
+      dem:{type:'raster-dem', tiles:['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'], tileSize:256, maxzoom:14, encoding:'terrarium', attribution:'Rilievo © Mapzen, AWS Terrain Tiles'},
+      route:{type:'geojson', data:{type:'Feature', geometry:{type:'LineString', coordinates:ll}}},
+      done:{type:'geojson', data:{type:'Feature', geometry:{type:'LineString', coordinates:[ll[0],ll[0]]}}}},
+      layers:[{id:'bg', type:'background', paint:{'background-color':'#9ec3e6'}},
+        {id:'sat', type:'raster', source:'sat'},
+        {id:'hill', type:'hillshade', source:'dem', paint:{'hillshade-exaggeration':0.25, 'hillshade-shadow-color':'#000'}},
+        {id:'route-case', type:'line', source:'route', layout:{'line-join':'round','line-cap':'round'}, paint:{'line-color':'#ffffff','line-width':6,'line-opacity':0.7}},
+        {id:'route', type:'line', source:'route', layout:{'line-join':'round','line-cap':'round'}, paint:{'line-color':'#fc5200','line-width':3.5}},
+        {id:'done', type:'line', source:'done', layout:{'line-join':'round','line-cap':'round'}, paint:{'line-color':'#ffd166','line-width':5}}],
+      terrain:{source:'dem', exaggeration:1.6}, sky:{'sky-color':'#7fb2e5','horizon-color':'#dbe9f6','fog-color':'#dbe9f6','sky-horizon-blend':0.6,'horizon-fog-blend':0.6,'fog-ground-blend':0.85}}});
+  FLY.map=map;
+  const dot=document.createElement('div'); dot.className='fly-dot';
+  FLY.marker=new maplibregl.Marker({element:dot}).setLngLat(ll[0]).addTo(map);
+  map.on('error',()=>{});
+  const b=ll.reduce((bb,p)=>bb.extend(p), new maplibregl.LngLatBounds(ll[0],ll[0]));
+  map.once('load',()=>{
+    map.fitBounds(b,{padding:40, pitch:55, bearing:-20, duration:0});
+    const at=o.querySelector('.maplibregl-ctrl-attrib'); if(at) at.classList.remove('maplibregl-compact-show');
+    $('#fly-msg').textContent='Premi ▶ per partire'; flyFrame(0,true);
+    setTimeout(()=>{ const m=$('#fly-msg'); if(m&&!FLY.playing) m.hidden=true; },2500);
+  });
+  $('#fly-play').onclick=()=>flyToggle();
+  $('#fly-pos').oninput=e=>{ FLY.pos=e.target.value/1000; FLY.brg=null; flyFrame(FLY.pos,true); };
+  o.querySelectorAll('[data-fsp]').forEach(bt=>bt.onclick=()=>{ FLY.speed=+bt.dataset.fsp; o.querySelectorAll('[data-fsp]').forEach(x=>x.setAttribute('aria-pressed',x===bt)); });
+  $('#fly-view').onclick=()=>{ FLY.view=(FLY.view+1)%3; FLY.brg=null; const m=$('#fly-msg'); m.hidden=false; m.textContent=['Vista: dietro al ciclista','Vista: dall\'alto','Vista: panoramica che gira'][FLY.view]; clearTimeout(FLY.mt); FLY.mt=setTimeout(()=>m.hidden=true,1500); if(!FLY.playing) flyFrame(FLY.pos,true); };
+  $('#fly-rec').onclick=flyRecord;
+}
+function flyToggle(force){
+  FLY.playing = force!=null? force : !FLY.playing;
+  const p=$('#fly-play'); if(p){ p.textContent=FLY.playing?'❚❚':'▶'; p.setAttribute('aria-label',FLY.playing?'Pausa':'Avvia'); }
+  if(FLY.playing){ if(FLY.pos>=1) FLY.pos=0; const m=$('#fly-msg'); if(m) m.hidden=true; FLY.last=performance.now(); FLY.raf=requestAnimationFrame(flyTick); }
+  else if(FLY.raf){ cancelAnimationFrame(FLY.raf); FLY.raf=0; }
+}
+function flyTick(now){
+  if(!FLY.map||!FLY.playing) return;
+  const dt=Math.min(100, now-FLY.last); FLY.last=now;
+  FLY.pos=Math.min(1, FLY.pos+dt*FLY.speed/FLY.dur);
+  flyFrame(FLY.pos);
+  if(FLY.pos>=1){ flyToggle(false); if(FLY.onEnd){ const f=FLY.onEnd; FLY.onEnd=null; setTimeout(f,1200); } return; }
+  FLY.raf=requestAnimationFrame(flyTick);
+}
+function flyFrame(frac, jump){
+  const map=FLY.map; if(!map) return;
+  const d=frac*FLY.len, p=flyAt(d), q=flyAt(Math.min(FLY.len, d+Math.max(150, FLY.len*0.012))), r=flyAt(Math.max(0,d-60));
+  const want=bearingDeg(r, q);
+  if(FLY.brg==null||jump) FLY.brg=want; else { let df=((want-FLY.brg+540)%360)-180; FLY.brg=(FLY.brg+df*0.04+360)%360; }
+  const ll=[p[1],p[0]];
+  FLY.marker.setLngLat(ll);
+  FLY.n=(FLY.n||0)+1;
+  if(jump || FLY.n%4===0){ // traccia percorsa (aggiornata ogni pochi fotogrammi)
+    let i=0; while(i<FLY.cum.length-1 && FLY.cum[i+1]<=d) i++;
+    const done=FLY.tr.slice(0,i+1).map(x=>[x[1],x[0]]); done.push(ll); if(done.length<2) done.push(ll);
+    const s=map.getSource('done'); if(s) s.setData({type:'Feature', geometry:{type:'LineString', coordinates:done}});
+  }
+  if(FLY.view===0) map.jumpTo({center:ll, bearing:FLY.brg, pitch:68, zoom:15.2});
+  else if(FLY.view===1) map.jumpTo({center:ll, bearing:FLY.brg, pitch:35, zoom:14.2});
+  else map.jumpTo({center:ll, bearing:(frac*540)%360, pitch:62, zoom:13.6});
+  const pf=$('#fly-pos'); if(pf && FLY.playing) pf.value=Math.round(frac*1000);
+  const s=flyProf(frac), hud=$('#fly-hud');
+  if(hud){ const km=s? s.km : d/1000;
+    hud.innerHTML=`<div><small>Distanza</small><b>${nf(km,1)}<i>km</i></b></div>${s&&s.alt!=null?`<div><small>Quota</small><b>${nf(s.alt)}<i>m</i></b></div>`:''}${s&&s.spd?`<div><small>Velocità</small><b>${nf(s.spd,1)}<i>km/h</i></b></div>`:''}${s&&s.hr?`<div><small>Battito</small><b>${nf(s.hr)}<i>bpm</i></b></div>`:''}${s&&s.pw?`<div><small>Potenza</small><b>${nf(s.pw)}<i>W</i></b></div>`:''}${s&&s.t!=null?`<div><small>Tempo</small><b>${fmtDur(s.t)}</b></div>`:''}`; }
+}
+// video: registra mappa + dati in un unico filmato e lo condivide/salva
+function flyRecord(){
+  const map=FLY.map; if(!map) return;
+  const src=map.getCanvas(), msg=$('#fly-msg');
+  const say=t=>{ msg.hidden=false; msg.textContent=t; };
+  if(!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream){ say('Questo telefono non permette di registrare video dall\'app. Puoi usare la registrazione schermo del telefono.'); return; }
+  if(FLY.rec && FLY.rec.state==='recording'){ FLY.onEnd=null; FLY.rec.stop(); flyToggle(false); return; }
+  const W=src.width, H=src.height, cv=document.createElement('canvas'); cv.width=W; cv.height=H; const cx=cv.getContext('2d');
+  const types=['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm'];
+  const mime=types.find(t=>MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t))||'';
+  const stream=cv.captureStream(30), chunks=[];
+  let rec; try{ rec=new MediaRecorder(stream, mime?{mimeType:mime, videoBitsPerSecond:6e6}:{}); }catch(e){ say('Registrazione non disponibile su questo telefono.'); return; }
+  FLY.rec=rec; rec.ondataavailable=e=>{ if(e.data&&e.data.size) chunks.push(e.data); };
+  const draw=()=>{ if(rec.state!=='recording') return;
+    cx.drawImage(src,0,0,W,H);
+    const sc=W/420, s=flyProf(FLY.pos), d=FLY.pos*FLY.len/1000;
+    cx.fillStyle='rgba(0,0,0,.55)'; cx.fillRect(0,H-70*sc,W,70*sc);
+    cx.fillStyle='#fc5200'; cx.fillRect(0,H-70*sc,W*FLY.pos,3*sc);
+    cx.fillStyle='#fff'; cx.font=`700 ${15*sc}px system-ui,sans-serif`; cx.textBaseline='top';
+    cx.fillText(FLY.a.name.slice(0,40), 12*sc, H-60*sc);
+    cx.font=`600 ${13*sc}px system-ui,sans-serif`; cx.fillStyle='#ddd';
+    cx.fillText([`${nf(s?s.km:d,1)} km`, s&&s.alt!=null?`${nf(s.alt)} m`:'', s&&s.spd?`${nf(s.spd,1)} km/h`:'', s&&s.hr?`${nf(s.hr)} bpm`:''].filter(Boolean).join('   ·   '), 12*sc, H-36*sc);
+    cx.textAlign='right'; cx.fillStyle='#fc5200'; cx.font=`800 ${12*sc}px system-ui,sans-serif`; cx.fillText('LDM · Quaderno Pedalate', W-12*sc, H-60*sc); cx.textAlign='left';
+    requestAnimationFrame(draw); };
+  rec.onstop=async()=>{
+    const bt=$('#fly-rec'); if(bt) bt.textContent='⏺ Video';
+    if(!chunks.length){ say('Video vuoto, riprova.'); return; }
+    const type=(mime||'video/webm').split(';')[0], ext=type.includes('mp4')?'mp4':'webm';
+    const blob=new Blob(chunks,{type}), name=`${FLY.a.name.replace(/[^\w\- ]+/g,'').trim().replace(/\s+/g,'-')||'uscita'}-3d.${ext}`;
+    const file=new File([blob],name,{type});
+    if(FLY.cancel) return;
+    const u=URL.createObjectURL(blob), canSh=navigator.canShare && navigator.canShare({files:[file]});
+    msg.hidden=false; msg.innerHTML=`<b>Video pronto</b> (${nf(blob.size/1048576,1)} MB)<span class="fly-out">${canSh?'<button class="primary" id="fly-sh">Condividi / Salva</button>':''}<a class="btn" href="${u}" download="${esc(name)}">Scarica</a><button id="fly-ok">Chiudi</button></span>`;
+    if(canSh) $('#fly-sh').onclick=async()=>{ try{ await navigator.share({files:[file], title:FLY.a.name}); }catch(e){} };
+    $('#fly-ok').onclick=()=>{ msg.hidden=true; };
+  };
+  // riparte dall'inizio e registra fino all'arrivo
+  FLY.pos=0; FLY.brg=null; flyFrame(0,true);
+  say('Registro il video… resta su questa schermata');
+  const bt=$('#fly-rec'); bt.textContent='⏹ Ferma';
+  let go=false; const begin=()=>{ if(go||!FLY.map||FLY.map!==map) return; go=true; rec.start(500); draw(); FLY.onEnd=()=>{ if(rec.state==='recording') rec.stop(); }; setTimeout(()=>{ msg.hidden=true; flyToggle(true); },300); };
+  map.once('idle',begin); setTimeout(begin,5000); map.triggerRepaint();
+}
+document.addEventListener('keydown',e=>{ if(e.key==='Escape' && $('#fly')) flyStop(); });
+
 
 /* ====================== classifiche personali, medaglie e coppe ====================== */
 const MEDAL_C=['#f5c242','#c9ced4','#d08a4a'];
@@ -961,7 +1139,7 @@ function renderDettaglio(){
   <div><p class="muted">${esc(fmtDate(a.start))} alle ${fmtTime(a.start)} · ${esc(a.source||'')}${a.sub&&SUB_L[a.sub]?' · '+SUB_L[a.sub]:''}</p><h1>${esc(a.name)}${a.isExample?'<span class="tag ex">esempio</span>':''}</h1></div>
   ${(state.medals[a.id]||[]).length?`<div class="panel"><h3>Risultati</h3><div class="achv">${state.medals[a.id].map(m=>`<div>${medalSVG(m.rank,30)}<span><b>${m.rank+1}° ${m.scope==='sempre'?'di sempre':'del '+m.scope}</b><small>${esc(m.c.l)} · ${m.c.f(m.c.v(a))}</small></span></div>`).join('')}</div></div>`:''}
   <div class="grid2">
-    <div class="panel">${kindOf(a)==='spin' && !(a.track&&a.track.length>1) ? spinSVG(600,400,true) : !EMBEDDED && a.track && a.track.length>1 ? `<div id="lmap" class="lmap" role="region" aria-label="Mappa del percorso"></div>` : routeSVG(a.track,600,400,false)}</div>
+    <div class="panel">${kindOf(a)==='spin' && !(a.track&&a.track.length>1) ? spinSVG(600,400,true) : !EMBEDDED && a.track && a.track.length>1 ? `<div id="lmap" class="lmap" role="region" aria-label="Mappa del percorso"></div><div class="fly-open"><span class="small muted">Rivivi l'uscita sorvolando il percorso sul satellite, con montagne in rilievo.</span><button class="primary" id="fly-go">▶ Guarda in 3D</button></div>` : routeSVG(a.track,600,400,false)}</div>
     <div class="panel"><div class="stats">
       ${S('Distanza',nf(a.distance/1000,2),'km')}${S('Dislivello positivo',nf(a.gain),'m')}
       ${S('Tempo in movimento',fmtDur(a.moving))}${S('Tempo trascorso',fmtDur(a.elapsed))}
@@ -1004,6 +1182,7 @@ function renderDettaglio(){
       {label:'Questa uscita', data:WINDOWS.map((w,i)=>({x:w,y:a.best[i]})).filter(p=>p.y), borderColor:css('--pw'), backgroundColor:alpha(css('--pw'),.15), fill:true, pointRadius:3, pointBackgroundColor:css('--pw')}]},
       options:baseOpts({scales:axes({type:'logarithmic', min:5, max:7200, afterBuildTicks:ax=>{ax.ticks=WINDOWS.map(v=>({value:v}));}, ticks:{color:css('--muted'), callback:v=>durLabel(v), autoSkip:false}},{ticks:{color:css('--muted'), callback:v=>v+' W'}}), plugins:{legend:{display:false}, tooltip:{callbacks:{title:it=>durLabel(it[0].parsed.x), label:it=>it.dataset.label+': '+it.parsed.y+' W'}}}})}); }
   if($('#lmap')) initMap(a);
+  const fg=$('#fly-go'); if(fg) fg.onclick=()=>openFly(a);
   fillGallery(a);
   const rb=$('#repair'); if(rb) rb.onclick=async()=>{ rb.disabled=true; rb.textContent='Scarico…'; STRAVA.queue.unshift({id:a.stravaId, name:a.name, type:a.stype||(a.sub==='mtb'?'MountainBikeRide':'Ride'), start:a.start, distance:a.distance, moving:a.moving, elapsed:a.elapsed, gain:a.gain, trainer:!!a.trainer || a.sub==='indoor', repair:a.id}); delete a.repairTried; saveStrava(); await stravaSync('resume'); state.sel=(state.acts.find(x=>x.stravaId===a.stravaId)||a).id; show('dettaglio'); };
   $('#ph-add').onchange=async e=>{ const fs=[...e.target.files]; e.target.value=''; for(const f of fs){ try{ await savePhoto(a,f); }catch(err){} } await DB.put(a); fillGallery(a); };
@@ -1529,6 +1708,7 @@ document.addEventListener('click',e=>{ const c=e.target.closest('[data-cal]'); i
 const VIEWS=['riepilogo','attivita','classifiche','gruppo','forma','importa','profilo'];
 const RENDER={riepilogo:renderRiepilogo, attivita:renderAttivita, dettaglio:renderDettaglio, classifiche:renderClassifiche, gruppo:renderGruppo, forma:renderForma, importa:renderImporta, profilo:renderProfilo};
 function show(view){
+  if(typeof flyStop==='function' && $('#fly')) flyStop();
   renderMe();
   state.view=view;
   for(const id of [...VIEWS,'dettaglio']) $('#v-'+id).hidden = id!==view;
