@@ -7,3 +7,5 @@ App per il telefono (Android e iPhone) che importa le uscite in bici da Strava o
 - Pubblicata con GitHub Pages: si installa dalla schermata Home.
 
 Il sorgente è `src/app.html`; `python3 src/build.py` rigenera `index.html` e `sw.js`.
+
+Indirizzo dell'app: https://pnicolo1-dot.github.io/quaderno.pedalate/
