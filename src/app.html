@@ -112,6 +112,9 @@ button:hover{filter:brightness(1.06)}
 .tag.ex{color:var(--accent);border-color:var(--accent)}
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 input[type=text],input[type=number],input[type=search],select{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+.lmap{position:relative}.map-hint{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);z-index:500;background:rgba(0,0,0,.65);color:#fff;font-size:12px;padding:5px 10px;border-radius:999px;pointer-events:none;white-space:nowrap}
+.map-done{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);z-index:600;background:var(--accent);color:#fff;border:none;min-height:40px;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+.lmap.free{outline:2px solid var(--accent)}
 .lmap{width:100%;height:380px;max-width:100%;border-radius:8px;background:var(--surface2);z-index:0}
 @media (max-width:560px){.lmap{height:320px}}
 .leaflet-control-layers,.leaflet-bar a{color:#1b1f1d}
@@ -701,8 +704,17 @@ async function initMap(a){
     'Topografica': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17, subdomains:'abc', attribution:'© OpenStreetMap · © OpenTopoMap (CC-BY-SA)'})
   };
   let pref='Stradale'; try{ const v=localStorage.getItem('qp-maplayer'); if(layers[v]) pref=v; }catch(e){}
-  const map=L.map(box,{zoomControl:true, attributionControl:true, layers:[layers[pref]], tap:true});
+  // mappa bloccata sul percorso: si esplora solo dopo un doppio tocco
+  const map=L.map(box,{zoomControl:false, attributionControl:true, layers:[layers[pref]], dragging:false, touchZoom:false, scrollWheelZoom:false, doubleClickZoom:false, boxZoom:false, keyboard:false});
   state.map=map;
+  const zc=L.control.zoom({position:'topleft'});
+  const hint=document.createElement('div'); hint.className='map-hint'; hint.textContent='Tocca due volte per esplorare la mappa'; box.append(hint);
+  const done=document.createElement('button'); done.className='map-done'; done.type='button'; done.textContent='✓ Fine, rimetti al centro'; done.hidden=true; box.append(done);
+  L.DomEvent.disableClickPropagation(done);
+  const setFree=on=>{ ['dragging','touchZoom','scrollWheelZoom','boxZoom','keyboard'].forEach(h=>map[h]&&map[h][on?'enable':'disable']()); if(on) setTimeout(()=>{ if(map.dragging.enabled()) map.doubleClickZoom.enable(); },600); else map.doubleClickZoom.disable(); if(on) zc.addTo(map); else zc.remove(); hint.hidden=on; done.hidden=!on; box.classList.toggle('free',on); };
+  map.on('dblclick',()=>{ if(!map.dragging.enabled()) setFree(true); });
+  let lastTap=0; map.on('click',()=>{ const t=Date.now(); if(t-lastTap<400 && !map.dragging.enabled()) setFree(true); lastTap=t; }); // riserva per i telefoni che non segnalano il doppio tocco
+  done.onclick=e=>{ e.stopPropagation(); setFree(false); map.fitBounds(line.getBounds(),{padding:[24,24]}); };
   L.control.layers(layers,null,{position:'topright'}).addTo(map);
   map.on('baselayerchange',e=>{ try{ localStorage.setItem('qp-maplayer',e.name); }catch(_){} });
   L.polyline(a.track,{color:'#ffffff', weight:7, opacity:.85}).addTo(map);
