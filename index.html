@@ -175,7 +175,7 @@ code{font-size:13px;background:var(--surface2);padding:1px 5px;border-radius:4px
 .fly-btns{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px}
 .fly-btns button{min-height:44px}.fly-btns>button:not(.primary){background:rgba(0,0,0,.5);color:#fff;border-color:rgba(255,255,255,.3)}
 #fly-play{min-width:56px;font-size:18px}
-.fly-dot{width:18px;height:18px;border-radius:50%;background:#fc5200;border:3px solid #fff;box-shadow:0 0 0 4px rgba(252,82,0,.35),0 2px 6px rgba(0,0,0,.5)}
+.fly-dot{z-index:2;width:18px;height:18px;border-radius:50%;background:#fc5200;border:3px solid #fff;box-shadow:0 0 0 4px rgba(252,82,0,.35),0 2px 6px rgba(0,0,0,.5)}
 .fly-open{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:10px}
 #fly .maplibregl-ctrl-attrib{font-size:10px}
 #fly .maplibregl-ctrl-bottom-right{bottom:calc(env(safe-area-inset-bottom) + 140px)}
@@ -799,10 +799,10 @@ async function openFly(a){
         {id:'route-case', type:'line', source:'route', layout:{'line-join':'round','line-cap':'round'}, paint:{'line-color':'#ffffff','line-width':6,'line-opacity':0.7}},
         {id:'route', type:'line', source:'route', layout:{'line-join':'round','line-cap':'round'}, paint:{'line-color':'#fc5200','line-width':3.5}},
         {id:'done', type:'line', source:'done', layout:{'line-join':'round','line-cap':'round'}, paint:{'line-color':'#ffd166','line-width':5}}],
-      terrain:{source:'dem', exaggeration:1.6}, sky:{'sky-color':'#7fb2e5','horizon-color':'#dbe9f6','fog-color':'#dbe9f6','sky-horizon-blend':0.6,'horizon-fog-blend':0.6,'fog-ground-blend':0.85}}});
+      terrain:{source:'dem', exaggeration:1.4}, sky:{'sky-color':'#7fb2e5','horizon-color':'#dbe9f6','fog-color':'#dbe9f6','sky-horizon-blend':0.6,'horizon-fog-blend':0.6,'fog-ground-blend':0.85}}});
   FLY.map=map;
   const dot=document.createElement('div'); dot.className='fly-dot';
-  FLY.marker=new maplibregl.Marker({element:dot}).setLngLat(ll[0]).addTo(map);
+  FLY.marker=new maplibregl.Marker({element:dot, opacityWhenCovered:'1'}).setLngLat(ll[0]).addTo(map);
   map.on('error',()=>{});
   const b=ll.reduce((bb,p)=>bb.extend(p), new maplibregl.LngLatBounds(ll[0],ll[0]));
   map.once('load',()=>{
@@ -844,9 +844,17 @@ function flyFrame(frac, jump){
     const done=FLY.tr.slice(0,i+1).map(x=>[x[1],x[0]]); done.push(ll); if(done.length<2) done.push(ll);
     const s=map.getSource('done'); if(s) s.setData({type:'Feature', geometry:{type:'LineString', coordinates:done}});
   }
-  if(FLY.view===0) map.jumpTo({center:ll, bearing:FLY.brg, pitch:68, zoom:15.2});
-  else if(FLY.view===1) map.jumpTo({center:ll, bearing:FLY.brg, pitch:35, zoom:14.2});
-  else map.jumpTo({center:ll, bearing:(frac*540)%360, pitch:62, zoom:13.6});
+  // telecamera sempre centrata sul puntino: se il rilievo lo nasconde o lo sposta, abbassa l'inclinazione
+  const cam=[{b:FLY.brg, p:60, z:15.4},{b:FLY.brg, p:35, z:14.4},{b:(frac*540)%360, p:58, z:13.8}][FLY.view];
+  if(FLY.padj==null||jump) FLY.padj=0;
+  const put=()=>{ map.jumpTo({center:ll, bearing:cam.b, pitch:Math.max(20,cam.p-FLY.padj), zoom:cam.z});
+    // la quota del centro va aggiornata subito, altrimenti la telecamera resta all'altezza del fotogramma prima
+    try{ if(map.terrain){ map.transform.elevation=map.terrain.getElevationForLngLatZoom(maplibregl.LngLat.convert(ll), map.transform.tileZoom); } }catch(e){} };
+  put();
+  const cv=map.getCanvas(), w=cv.clientWidth, h=cv.clientHeight, sp=map.project(ll);
+  const off=!isFinite(sp.x)||Math.abs(sp.x-w/2)>w*0.18||Math.abs(sp.y-h/2)>h*0.18;
+  if(off){ for(let k=0;k<4 && FLY.padj<40;k++){ FLY.padj+=10; put(); const q=map.project(ll); if(Math.abs(q.x-w/2)<=w*0.18 && Math.abs(q.y-h/2)<=h*0.18) break; } }
+  else if(FLY.padj>0) FLY.padj=Math.max(0,FLY.padj-0.3);
   const pf=$('#fly-pos'); if(pf && FLY.playing) pf.value=Math.round(frac*1000);
   const s=flyProf(frac), hud=$('#fly-hud');
   if(hud){ const km=s? s.km : d/1000;
@@ -2017,7 +2025,7 @@ try{ const mq=matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('c
 })();
 </script>
 <script>
-window.APP_VERSION='202611100621';
+window.APP_VERSION='202611100627';
 if('serviceWorker' in navigator && location.protocol==='https:'){
   const had=!!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js?v='+APP_VERSION).then(reg=>{
