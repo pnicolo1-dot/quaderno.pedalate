@@ -183,7 +183,7 @@ ul.src{padding-left:18px}ul.src li{margin:6px 0}ul.src a{color:var(--info)}
 .feed .ft{font-family:var(--f-display);font-size:24px;font-weight:700;margin:8px 16px 6px;text-transform:none;letter-spacing:0;color:var(--fg)}
 .feed .fk{display:flex;gap:28px;padding:0 16px 12px;flex-wrap:wrap}.feed .fk small{display:block;color:var(--muted);font-size:13px}.feed .fk b{font-size:22px;font-variant-numeric:tabular-nums}
 .feed .fm{position:relative}
-.smap{position:relative;width:100%;overflow:hidden;background:#1d2228}.smap img{position:absolute;max-width:none;display:block}.smap>svg{position:absolute;inset:0;width:100%;height:100%}
+.smap{position:relative;width:100%;overflow:hidden;background:#1d2228}.smap img{position:absolute;max-width:none;display:block}.smap .dim{position:absolute;inset:0;background:rgba(10,14,20,.28)}.smap>svg{position:absolute;inset:0;width:100%;height:100%}
 .smap.svgonly svg{position:static}.smap.spin svg{position:static;width:64px;height:64px}.smap.spin{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;aspect-ratio:640/220;background:var(--surface2);color:var(--muted);font-size:13px}
 .fplay{position:absolute;left:12px;bottom:12px;width:52px;height:52px;border-radius:12px;background:rgba(0,0,0,.6);border:none;display:grid;place-items:center;padding:0}
 .feed .ff{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 16px 14px;font-size:13px;color:var(--muted)}.feed .ff .with{display:inline-flex;align-items:center;gap:4px}
@@ -984,12 +984,16 @@ async function showHeat(){
   try{ await loadLeaflet(); }catch(e){ box.innerHTML='<p class="small c-bad">La mappa ha bisogno di internet.</p>'; return; }
   const el=$('#hmap'); if(!el) return;
   const map=L.map(el,{preferCanvas:true, attributionControl:true});
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19, subdomains:'abcd', attribution:'© OpenStreetMap · © CARTO'}).addTo(map);
+  const layers={
+    'Satellite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19, attribution:'© Esri, Maxar, Earthstar Geographics'}),
+    'Stradale': L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{maxZoom:20, subdomains:'abcd', attribution:'© OpenStreetMap · © CARTO'}),
+    'Topografica': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17, subdomains:'abc', attribution:'© OpenStreetMap · © OpenTopoMap (CC-BY-SA)'})};
+  layers.Satellite.addTo(map); L.control.layers(layers,null,{position:'topright'}).addTo(map);
   state.map=map;
   const R=L.canvas({padding:0.3}), tracks=cycling().filter(a=>a.track&&a.track.length>1);
   let bounds=null;
   for(const a of tracks){ const st=Math.max(1,Math.floor(a.track.length/200)), pts=a.track.filter((_,i)=>i%st===0);
-    const pl=L.polyline(pts,{renderer:R, color:'#fc5200', weight:2.5, opacity:0.35, interactive:false}).addTo(map); bounds=bounds? bounds.extend(pl.getBounds()) : pl.getBounds(); }
+    const pl=L.polyline(pts,{renderer:R, color:'#ff6a1a', weight:2.5, opacity:0.5, interactive:false}).addTo(map); bounds=bounds? bounds.extend(pl.getBounds()) : pl.getBounds(); }
   // il percorso più frequente è al centro: inquadro dove passi più spesso
   const fit=()=>{ if(bounds) map.fitBounds(bounds,{padding:[16,16]}); };
   fit(); lockMap(map, el, fit);
@@ -1259,14 +1263,17 @@ function staticMap(track, W=640, H=320, opt={}){
   const zf=Math.max(2, Math.min(16, Math.log2((W-70)/dx), Math.log2((H-60)/dy))), z=Math.floor(zf), k=2**(zf-z), TS=256*k;
   const pz=(la,lo)=>{ const q=px(la,lo,z); return [q[0]*k,q[1]*k]; };
   const a=pz(la1,lo0), b=pz(la0,lo1), cx=(a[0]+b[0])/2, cy=(a[1]+b[1])/2, X0=cx-W/2, Y0=cy-H/2;
-  let tiles=''; const n=2**z;
+  let tiles='', labels=''; const n=2**z;
   for(let tx=Math.floor(X0/TS); tx<=Math.floor((X0+W)/TS); tx++) for(let ty=Math.floor(Y0/TS); ty<=Math.floor((Y0+H)/TS); ty++){
     if(ty<0||ty>=n) continue; const wx=((tx%n)+n)%n, sd='abcd'[(wx+ty)%4];
-    tiles+=`<img loading="lazy" decoding="async" alt="" src="https://${sd}.basemaps.cartocdn.com/dark_all/${z}/${wx}/${ty}@2x.png" style="left:${((tx*TS-X0)/W*100).toFixed(3)}%;top:${((ty*TS-Y0)/H*100).toFixed(3)}%;width:${(TS/W*100+0.05).toFixed(3)}%;height:${(TS/H*100+0.05).toFixed(3)}%">`; }
+    const st=`left:${((tx*TS-X0)/W*100).toFixed(3)}%;top:${((ty*TS-Y0)/H*100).toFixed(3)}%;width:${(TS/W*100+0.05).toFixed(3)}%;height:${(TS/H*100+0.05).toFixed(3)}%`;
+    // satellite (come la mappa dell'uscita) con i nomi dei paesi sopra
+    tiles+=`<img loading="lazy" decoding="async" alt="" src="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${ty}/${wx}" style="${st}">`;
+    labels+=`<img loading="lazy" decoding="async" alt="" class="lbl" src="https://${sd}.basemaps.cartocdn.com/dark_only_labels/${z}/${wx}/${ty}@2x.png" style="${st}">`; }
   const P=T.map(([la,lo])=>{ const q=pz(la,lo); return [(q[0]-X0).toFixed(1),(q[1]-Y0).toFixed(1)]; });
   const d='M'+P.map(p=>p.join(',')).join('L'), s=P[0], e=P[P.length-1], mid=P[Math.floor(P.length*0.45)];
   const medal=opt.medal!=null? `<g transform="translate(${mid[0]-24} ${mid[1]-26})">${medalSVG(opt.medal,48).replace('<svg ','<svg x="0" y="0" ')}</g>` : '';
-  return `<div class="smap" style="aspect-ratio:${W}/${H}">${tiles}<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+  return `<div class="smap" style="aspect-ratio:${W}/${H}">${tiles}<i class="dim"></i>${labels}<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
     <path d="${d}" fill="none" stroke="#000" stroke-opacity=".45" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
     <path d="${d}" fill="none" stroke="#fc5200" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"/>
     <circle cx="${e[0]}" cy="${e[1]}" r="6.5" fill="#e34a33" stroke="#fff" stroke-width="2"/><circle cx="${s[0]}" cy="${s[1]}" r="7.5" fill="#43c25a" stroke="#fff" stroke-width="2"/>${medal}</svg></div>`;
