@@ -188,6 +188,9 @@ ul.src{padding-left:18px}ul.src li{margin:6px 0}ul.src a{color:var(--info)}
 .fplay{position:absolute;left:12px;bottom:12px;width:52px;height:52px;border-radius:12px;background:rgba(0,0,0,.6);border:none;display:grid;place-items:center;padding:0}
 .feed .ff{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 16px 14px;font-size:13px;color:var(--muted)}.feed .ff .with{display:inline-flex;align-items:center;gap:4px}
 @media (max-width:560px){.feed .ft{font-size:21px}.feed .fk{gap:20px}.feed .fk b{font-size:20px}}
+.climbs{display:grid;gap:8px}.climb{border:1px solid var(--line);border-radius:10px;background:var(--surface2)}.climb summary{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;cursor:pointer;list-style:none}.climb summary::-webkit-details-marker{display:none}
+.climb .cl-n,.climb .cl-v{display:flex;flex-direction:column;min-width:0}.climb .cl-v{text-align:right;white-space:nowrap}.climb small{color:var(--muted);font-size:12px}.climb .rank{margin:0 12px}.cl-ren{margin:6px 12px 12px}.cl-edit{display:flex;gap:8px;margin:6px 12px 12px}.cl-edit input{flex:1;min-width:0}
+table.gt tbody th small{display:block;font-size:11px;color:var(--muted);font-weight:400}
 </style>
 
 <header class="top"><div class="wrap bar">
@@ -602,6 +605,7 @@ function makeExamples(){
 function recompute(){
   const acts=state.acts; state.fitness=[];
   computeMedals();
+  try{ computeClimbs(); }catch(e){ state.climbs=[]; state.climbByAct=new Map(); }
   if(!acts.length) return;
   const byDay=new Map(); for(const a of acts){ const k=dayKey(a.start); byDay.set(k,(byDay.get(k)||0)+tss(a)); }
   const first=new Date(dayStart(Math.min(...acts.map(a=>a.start)))); const end=dayStart(Date.now());
@@ -716,17 +720,9 @@ async function initMap(a){
     'Topografica': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{maxZoom:17, subdomains:'abc', attribution:'© OpenStreetMap · © OpenTopoMap (CC-BY-SA)'})
   };
   let pref='Stradale'; try{ const v=localStorage.getItem('qp-maplayer'); if(layers[v]) pref=v; }catch(e){}
-  // mappa bloccata sul percorso: si esplora solo dopo un doppio tocco
-  const map=L.map(box,{zoomControl:false, attributionControl:true, layers:[layers[pref]], dragging:false, touchZoom:false, scrollWheelZoom:false, doubleClickZoom:false, boxZoom:false, keyboard:false});
+  const map=L.map(box,{attributionControl:true, layers:[layers[pref]]});
   state.map=map;
-  const zc=L.control.zoom({position:'topleft'});
-  const hint=document.createElement('div'); hint.className='map-hint'; hint.textContent='Tocca due volte per esplorare la mappa'; box.append(hint);
-  const done=document.createElement('button'); done.className='map-done'; done.type='button'; done.textContent='✓ Fine, rimetti al centro'; done.hidden=true; box.append(done);
-  L.DomEvent.disableClickPropagation(done);
-  const setFree=on=>{ ['dragging','touchZoom','scrollWheelZoom','boxZoom','keyboard'].forEach(h=>map[h]&&map[h][on?'enable':'disable']()); if(on) setTimeout(()=>{ if(map.dragging.enabled()) map.doubleClickZoom.enable(); },600); else map.doubleClickZoom.disable(); if(on) zc.addTo(map); else zc.remove(); hint.hidden=on; done.hidden=!on; box.classList.toggle('free',on); };
-  map.on('dblclick',()=>{ if(!map.dragging.enabled()) setFree(true); });
-  let lastTap=0; map.on('click',()=>{ const t=Date.now(); if(t-lastTap<400 && !map.dragging.enabled()) setFree(true); lastTap=t; }); // riserva per i telefoni che non segnalano il doppio tocco
-  done.onclick=e=>{ e.stopPropagation(); setFree(false); map.fitBounds(line.getBounds(),{padding:[24,24]}); };
+  lockMap(map, box, ()=>map.fitBounds(line.getBounds(),{padding:[24,24]}));
   L.control.layers(layers,null,{position:'topright'}).addTo(map);
   map.on('baselayerchange',e=>{ try{ localStorage.setItem('qp-maplayer',e.name); }catch(_){} });
   L.polyline(a.track,{color:'#ffffff', weight:7, opacity:.85}).addTo(map);
@@ -901,6 +897,107 @@ function flyRecord(){
 }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape' && $('#fly')) flyStop(); });
 
+/* ====================== mappa bloccata riutilizzabile ====================== */
+function lockMap(map, box, fit){
+  ['dragging','touchZoom','scrollWheelZoom','doubleClickZoom','boxZoom','keyboard'].forEach(h=>map[h]&&map[h].disable());
+  if(map.zoomControl) map.zoomControl.remove();
+  const zc=L.control.zoom({position:'topleft'});
+  const hint=document.createElement('div'); hint.className='map-hint'; hint.textContent='Tocca due volte per esplorare la mappa'; box.append(hint);
+  const done=document.createElement('button'); done.className='map-done'; done.type='button'; done.textContent='✓ Fine, rimetti al centro'; done.hidden=true; box.append(done);
+  L.DomEvent.disableClickPropagation(done);
+  const setFree=on=>{ ['dragging','touchZoom','scrollWheelZoom','boxZoom','keyboard'].forEach(h=>map[h]&&map[h][on?'enable':'disable']()); if(on) setTimeout(()=>{ if(map.dragging.enabled()) map.doubleClickZoom.enable(); },600); else map.doubleClickZoom.disable(); if(on) zc.addTo(map); else zc.remove(); hint.hidden=on; done.hidden=!on; box.classList.toggle('free',on); };
+  map.on('dblclick',()=>{ if(!map.dragging.enabled()) setFree(true); });
+  let lastTap=0; map.on('click',()=>{ const t=Date.now(); if(t-lastTap<400 && !map.dragging.enabled()) setFree(true); lastTap=t; }); // riserva per i telefoni che non segnalano il doppio tocco
+  done.onclick=e=>{ e.stopPropagation(); setFree(false); fit(); };
+}
+
+/* ====================== le mie salite (segmenti personali automatici) ====================== */
+// trova le salite di un'uscita dal profilo altimetrico: almeno 60 m, 400 m di lunghezza e 3% di pendenza media
+function findClimbs(a){
+  const P=a.prof; if(!P||!P.d||P.d.length<10||!P.t||!a.track||a.track.length<10) return [];
+  const n=P.d.length, alt=P.alt.map((v,i)=>v!=null? v : null); if(alt.filter(v=>v!=null).length<n*0.8) return [];
+  for(let i=1;i<n;i++) if(alt[i]==null) alt[i]=alt[i-1]; if(alt[0]==null) alt[0]=alt.find(v=>v!=null);
+  const sm=alt.map((_,i)=>{ let s=0,c=0; for(let j=Math.max(0,i-2);j<=Math.min(n-1,i+2);j++){ s+=alt[j]; c++; } return s/c; });
+  const out=[]; let m=0, M=0;
+  const close=()=>{ const gain=sm[M]-sm[m], dist=(P.d[M]-P.d[m])*1000;
+    if(gain>=60 && dist>=400 && gain/dist>=0.03){ const tT=P.t[n-1]||1, at=i=>a.track[Math.min(a.track.length-1, Math.round(P.t[i]/tT*(a.track.length-1)))];
+      out.push({i0:m, i1:M, gain, dist, grade:gain/dist*100, secs:P.t[M]-P.t[m], s:at(m), e:at(M), alt0:sm[m], alt1:sm[M]}); } };
+  for(let i=1;i<n;i++){
+    if(sm[i]>sm[M]) M=i;
+    if(sm[i]<sm[M]-25){ if(M>m) close(); m=i; M=i; }
+    else if(sm[i]<sm[m]){ m=i; M=i; }
+  }
+  if(M>m) close();
+  return out.filter(c=>c.secs>0);
+}
+const near=(p,q,r=250)=>p&&q&&hav(p[0],p[1],q[0],q[1])<=r;
+function climbNames(){ return store('qp-climbnames')||{}; }
+function computeClimbs(){
+  const groups=[];
+  for(const a of allRides()){ if(kindOf(a)!=='bike') continue;
+    for(const c of findClimbs(a)){
+      let g=groups.find(g=>near(g.s,c.s)&&near(g.e,c.e));
+      if(!g){ g={id:'c'+c.s[0].toFixed(3)+'_'+c.s[1].toFixed(3)+'_'+c.e[0].toFixed(3)+'_'+c.e[1].toFixed(3), s:c.s, e:c.e, efforts:[]}; groups.push(g); }
+      g.efforts.push({a, ...c});
+    } }
+  const names=climbNames();
+  for(const g of groups){ g.efforts.sort((x,y)=>x.secs-y.secs); const r=g.efforts[0];
+    g.dist=mean(g.efforts.map(x=>x.dist)); g.gain=mean(g.efforts.map(x=>x.gain)); g.grade=g.gain/g.dist*100; g.top=Math.max(...g.efforts.map(x=>x.alt1));
+    g.name=names[g.id] || `Salita di ${nf(g.dist/1000,1)} km al ${nf(g.grade,1)}%`; g.best=r; }
+  groups.sort((x,y)=>y.efforts.length-x.efforts.length || y.gain-x.gain);
+  state.climbs=groups;
+  state.climbByAct=new Map();
+  for(const g of groups) g.efforts.forEach((ef,rank)=>{ const arr=state.climbByAct.get(ef.a.id)||[]; arr.push({g, ef, rank}); state.climbByAct.set(ef.a.id,arr); });
+}
+const vamOf=ef=>ef.gain/(ef.secs/3600);
+function climbEffortsHTML(g, max=10){
+  return `<ol class="rank">${g.efforts.slice(0,max).map((ef,i)=>`<li><button data-open="${ef.a.id}"><span class="pos">${i<3? medalSVG(i,26) : `<b>${i+1}</b>`}</span><span class="who"><b>${fmtDur(ef.secs)}</b><small>${esc(fmtDate(ef.a.start))} · ${nf(vamOf(ef))} m/h${ef.a.avgHr?'':''}</small></span><span class="val">${nf(ef.dist/ef.secs*3.6,1)} km/h</span></button></li>`).join('')}</ol>`;
+}
+function climbsPanelHTML(){
+  const C=(state.climbs||[]); if(!C.length) return `<div class="panel"><h3>Le tue salite</h3><p class="muted small">Qui compaiono da sole le salite che ripeti, con i tuoi tempi migliori, come i segmenti di Strava. Servono uscite con i dettagli (file o Strava con dati completi).</p></div>`;
+  const shown=C.slice(0,state.climbAll?60:8);
+  return `<div class="panel"><div class="toolbar" style="justify-content:space-between"><h3>Le tue salite</h3><span class="small muted">${C.length} salite trovate</span></div>
+    <p class="small muted">Riconosciute da sole nelle tue uscite (almeno 60 m di dislivello). Ogni volta che la rifai trovi il tuo tempo in classifica, come un segmento di Strava.</p>
+    <div class="climbs">${shown.map(g=>`<details class="climb"><summary><span class="cl-n"><b>${esc(g.name)}</b><small>${nf(g.dist/1000,1)} km · ${nf(g.gain)} m · ${nf(g.grade,1)}% · fino a ${nf(g.top)} m</small></span><span class="cl-v"><b>${fmtDur(g.best.secs)}</b><small>${g.efforts.length} ${g.efforts.length===1?'volta':'volte'}</small></span></summary>
+      ${climbEffortsHTML(g)}<button class="small cl-ren" data-climb-ren="${g.id}">Rinomina</button></details>`).join('')}</div>
+    ${C.length>8&&!state.climbAll?`<button id="cl-more" style="margin-top:10px">Mostra tutte (${C.length})</button>`:''}</div>`;
+}
+function actClimbsHTML(a){
+  const L=(state.climbByAct&&state.climbByAct.get(a.id))||[]; if(!L.length) return '';
+  return `<div class="panel"><h3>Salite di questa uscita</h3><div class="tablewrap"><table class="gt"><thead><tr><th style="text-align:left">Salita</th><th>Tempo</th><th>VAM</th><th>Posizione</th></tr></thead><tbody>
+    ${L.sort((x,y)=>x.ef.i0-y.ef.i0).map(({g,ef,rank})=>{ const pr=g.efforts[0], diff=ef.secs-pr.secs;
+      return `<tr><th>${esc(g.name)}<small>${nf(ef.dist/1000,1)} km · ${nf(ef.gain)} m · ${nf(ef.grade,1)}%</small></th><td><b>${fmtDur(ef.secs)}</b>${rank>0?`<small>+${fmtDur(diff)} dal record</small>`:''}</td><td>${nf(vamOf(ef))} m/h</td><td>${g.efforts.length<2? '<small>prima volta</small>' : rank<3? `${medalSVG(rank,22)}${rank===0?' <b class="c-good">Record!</b>':''}` : `${rank+1}° su ${g.efforts.length}`}</td></tr>`; }).join('')}
+  </tbody></table></div></div>`;
+}
+document.addEventListener('click',e=>{
+  if(e.target.closest('#cl-more')){ state.climbAll=true; renderClassifiche(); return; }
+  const r=e.target.closest('[data-climb-ren]'); if(r){ const g=state.climbs.find(x=>x.id===r.dataset.climbRen); if(!g) return;
+    const box=document.createElement('div'); box.className='cl-edit'; box.innerHTML=`<input type="text" value="${esc(g.name)}" aria-label="Nome della salita" maxlength="60"><button class="primary">Salva</button>`;
+    r.replaceWith(box); const inp=box.querySelector('input'); inp.focus(); inp.select();
+    box.querySelector('button').onclick=()=>{ const nm=climbNames(); const v=inp.value.trim(); if(v) nm[g.id]=v; else delete nm[g.id]; store('qp-climbnames',nm); computeClimbs(); renderClassifiche(); }; }
+});
+
+/* ====================== mappa di calore personale ====================== */
+function heatPanelHTML(){ return EMBEDDED? '' : `<div class="panel"><div class="toolbar" style="justify-content:space-between"><div><h3>La tua mappa di calore</h3><p class="small muted">Tutti i tuoi percorsi su un'unica mappa: più una strada è arancione, più ci sei passato.</p></div><button id="heat-go">Mostra la mappa</button></div><div id="heat-box"></div></div>`; }
+async function showHeat(){
+  const box=$('#heat-box'); box.innerHTML='<div id="hmap" class="lmap" role="region" aria-label="Mappa di calore"></div>'; $('#heat-go').hidden=true;
+  try{ await loadLeaflet(); }catch(e){ box.innerHTML='<p class="small c-bad">La mappa ha bisogno di internet.</p>'; return; }
+  const el=$('#hmap'); if(!el) return;
+  const map=L.map(el,{preferCanvas:true, attributionControl:true});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19, subdomains:'abcd', attribution:'© OpenStreetMap · © CARTO'}).addTo(map);
+  state.map=map;
+  const R=L.canvas({padding:0.3}), tracks=cycling().filter(a=>a.track&&a.track.length>1);
+  let bounds=null;
+  for(const a of tracks){ const st=Math.max(1,Math.floor(a.track.length/200)), pts=a.track.filter((_,i)=>i%st===0);
+    const pl=L.polyline(pts,{renderer:R, color:'#fc5200', weight:2.5, opacity:0.35, interactive:false}).addTo(map); bounds=bounds? bounds.extend(pl.getBounds()) : pl.getBounds(); }
+  // il percorso più frequente è al centro: inquadro dove passi più spesso
+  const fit=()=>{ if(bounds) map.fitBounds(bounds,{padding:[16,16]}); };
+  fit(); lockMap(map, el, fit);
+  const info=document.createElement('p'); info.className='small muted'; info.textContent=`${tracks.length} percorsi sulla mappa.`; box.append(info);
+  setTimeout(()=>map.invalidateSize(),150);
+}
+document.addEventListener('click',e=>{ if(e.target.closest('#heat-go')) showHeat(); });
+
 
 /* ====================== classifiche personali, medaglie e coppe ====================== */
 const MEDAL_C=['#f5c242','#c9ced4','#d08a4a'];
@@ -993,6 +1090,7 @@ function renderClassifiche(){
     <div class="seg" role="group" aria-label="Periodo">${[['sempre','Sempre'],['anno','Quest\'anno'],['90','90 giorni']].map(([k,l])=>`<button data-rkp="${k}" aria-pressed="${(state.rkPeriod||'sempre')===k}">${l}</button>`).join('')}</div></div>
     <div class="chips" role="group" aria-label="Categoria">${cats.map(c=>`<button class="chipbtn" data-rkc="${c.k}" aria-pressed="${c===cat}">${esc(c.l)}</button>`).join('')}</div>
     <ol class="rank">${list.map((x,i)=>`<li><button data-open="${x.a.id}"><span class="pos">${i<3? medalSVG(i,26) : `<b>${i+1}</b>`}</span><span class="who"><b>${esc(x.a.name)}</b><small>${esc(fmtDate(x.a.start))}</small></span><span class="val">${cat.f(x.v)}</span></button></li>`).join('') || '<li class="muted">Nessuna uscita in questo periodo.</li>'}</ol></div>
+  ${climbsPanelHTML()}
   <div class="panel"><h3>Bacheca delle coppe</h3><div class="cups">${tr.map(t=>`<div class="cup ${t.on?'on':''}">${cupSVG(t.on)}<div style="min-width:0"><b>${esc(t.l)}</b><small>${esc(t.d)}</small>${t.a?`<a data-open="${t.a.id}" class="small">${esc(fmtDay(t.a.start))} · ${esc(t.a.name)}</a>`:''}${t.prog!=null?`<span class="bar"><i style="width:${(t.prog*100).toFixed(0)}%"></i></span><small>${t.txt}</small>`:''}${!t.on&&t.prog==null?'<small>Ancora da conquistare</small>':''}</div></div>`).join('')}</div></div>`;
 }
 document.addEventListener('click',e=>{
@@ -1116,7 +1214,6 @@ function renderRiepilogo(){
   </div>
   ${goalsHTML()}
   <div class="panel"><div class="toolbar" style="justify-content:space-between"><h3>Ultime 12 settimane</h3><div class="legend"><span><i style="background:var(--accent)"></i>km</span><span><i style="background:var(--elev)"></i>dislivello (m)</span></div></div><div class="chart"><canvas id="ch-weeks"></canvas></div></div>
-  ${yearCompareHTML()}
   <div class="grid2">
     <div class="panel"><div class="toolbar" style="justify-content:space-between"><h3>Consigli per te</h3><a href="#forma" class="small" style="color:var(--accent)">Tutti i consigli</a></div><div class="advice">${adv.map(advHTML).join('')||'<p class="muted">Servono più uscite per darti consigli.</p>'}</div></div>
     <div class="panel"><h3>Record personali</h3><div class="rec">
@@ -1128,14 +1225,14 @@ function renderRiepilogo(){
       ${[60,300,1200].map(w=>{ const b=bestPowerSince(w,0); const a=b.id&&state.acts.find(x=>x.id===b.id); return a? recRow('Potenza migliore '+durLabel(w), a, b.w+' W') : ''; }).join('')}
     </div></div>
   </div>
-  <div class="panel"><h3>Ultima attività</h3>${actCard(last)}</div>`;
+  <div><h3 style="margin:0 0 8px">Ultima attività</h3>${feedCard(last)}</div>`;
   const recentF=F.slice(-90);
   chart('ch-mini-fit',{type:'line', data:{labels:recentF.map(f=>fmtDay(f.d)), datasets:[
     {label:'Fitness', data:recentF.map(f=>+f.ctl.toFixed(1)), borderColor:css('--info'), backgroundColor:alpha(css('--info'),.12), fill:true},
     {label:'Fatica', data:recentF.map(f=>+f.atl.toFixed(1)), borderColor:css('--hr'), borderWidth:1.5}]},
     options:baseOpts({scales:axes({ticks:{color:css('--muted'), maxTicksLimit:4, maxRotation:0}},{ticks:{color:css('--muted'), maxTicksLimit:4}})})});
   const weeks=[]; for(let i=11;i>=0;i--){ const s=weekStart(now)-i*7*DAY; const a=weekAgg(s, s+7*DAY); weeks.push({s, ...a}); }
-  drawYearCompare();
+
   chart('ch-weeks',{type:'bar', data:{labels:weeks.map(w=>fmtDay(w.s)), datasets:[
     {type:'bar', label:'km', data:weeks.map(w=>+w.km.toFixed(1)), backgroundColor:css('--accent'), borderRadius:4, yAxisID:'y', order:2},
     {type:'line', label:'Dislivello m', data:weeks.map(w=>Math.round(w.gain)), borderColor:css('--elev'), pointRadius:3, pointBackgroundColor:css('--elev'), yAxisID:'y1', order:1}]},
@@ -1246,6 +1343,7 @@ function renderDettaglio(){
     ${has('cad')?'<div class="chart short"><canvas id="ch-cad"></canvas></div>':''}
   </div>
   ${dataPanel(a)}
+  ${actClimbsHTML(a)}
   ${splitsHTML(a)}
   ${(()=>{ const g=groupRides().find(x=>x.a.id===a.id); return g? `<div class="panel"><h3>Con i tuoi amici</h3>${groupTable(a,g.with)}</div>` : ''; })()}
   <div class="panel"><div class="toolbar" style="justify-content:space-between"><h3>Foto</h3><label class="btn" for="ph-add">Aggiungi foto</label><input type="file" id="ph-add" accept="image/*" multiple hidden></div>
@@ -1886,8 +1984,8 @@ function renderStatistiche(){
     <div class="seg" role="group" aria-label="Periodo">${[['sempre','Sempre'],['anno','Quest\'anno'],['12m','12 mesi'],['90','90 giorni']].map(([k,l])=>`<button data-stp="${k}" aria-pressed="${p===k}">${l}</button>`).join('')}</div></div>
     <div class="stats">
       ${S('Uscite',nf(g.n))}${S('Distanza',nf(g.km),'km')}${S('Dislivello',nf(g.gain),'m')}${S('Tempo in sella',fmtHM(g.time))}
-      ${S('Uscite a settimana',nf(g.n/(days/7),1))}${S('Km a settimana',nf(g.km/(days/7)),'km')}${S('Km per uscita',nf(g.n?g.km/g.n:null,1),'km')}${S('Dislivello per uscita',nf(g.n?g.gain/g.n:null),'m')}
-      ${S('Velocità media',nf(g.spd,1),'km/h')}${g.hr?S('FC media',nf(g.hr),'bpm'):''}${g.kcal?S('Calorie',nf(g.kcal),'kcal'):''}${S('Everest scalati',nf(g.gain/8849,1))}
+      ${S('Uscite a settimana',nf(g.n/(days/7),1))}${S('Km per uscita',nf(g.n?g.km/g.n:null,1),'km')}
+      ${S('Velocità media',nf(g.spd,1),'km/h')}${g.hr?S('FC media',nf(g.hr),'bpm'):''}
     </div>
     ${longest?`<p class="small muted" style="margin-top:12px">Uscita più lunga: <a data-open="${longest.id}">${esc(longest.name)}</a> (${nf(longest.distance/1000,1)} km) · più salita: <a data-open="${most.id}">${esc(most.name)}</a> (${nf(most.gain)} m)</p>`:''}
   </div>
@@ -1906,13 +2004,11 @@ function renderStatistiche(){
     <p class="small muted" style="margin-top:12px">Zone calcolate su FC max ${hrMaxEff()} bpm${ftpEff()?` e FTP ${ftpEff()} W`:''}: se non sono giuste aggiornale nel Profilo. Se hai problemi di cuore o di salute parlane prima con il medico sportivo.</p>
     <details><summary class="small">Da dove vengono questi consigli</summary><ul class="small src">${SOURCES.map(s=>`<li><a href="${s.u}" target="_blank" rel="noopener">${esc(s.t)}</a></li>`).join('')}</ul></details>
   </div>
-  <div class="grid2">
+  <div>
     <div class="panel"><h3>Anno per anno</h3><div class="tablewrap"><table class="gt"><thead><tr><th>Anno</th><th>Uscite</th><th>km</th><th>D+ m</th><th>Ore</th><th>km/h</th></tr></thead><tbody>
       ${yrows.map(r=>`<tr><th>${r.y}</th><td>${r.n}</td><td>${nf(r.km)}</td><td>${nf(r.gain)}</td><td>${nf(r.time/3600)}</td><td>${nf(r.spd,1)}</td></tr>`).join('')}</tbody></table></div></div>
-    <div class="panel"><h3>Come esci</h3>
-      <p class="small muted">Giorni della settimana</p><div class="bars">${wd.map((c,i)=>`<div><i style="height:${Math.round(c/Math.max(1,...wd)*100)}%"></i><span>${GIORNI[i]}</span><b>${c}</b></div>`).join('')}</div>
-      <p class="small muted" style="margin-top:14px">Lunghezza delle uscite</p><div class="bars">${bk.map((c,i)=>`<div><i style="height:${Math.round(c/Math.max(1,...bk)*100)}%"></i><span>${['<20','20–40','40–60','60–80','80+'][i]}</span><b>${c}</b></div>`).join('')}</div></div>
   </div>
+  ${heatPanelHTML()}
   <div class="panel"><div class="toolbar" style="justify-content:space-between"><div><h3>Report in PDF</h3><p class="small muted">Statistiche, miglioramenti, forma, consigli e piano in un PDF da salvare, stampare o mandare al tuo allenatore.</p></div><button class="primary" id="pdf-go">Crea il PDF</button></div><div id="pdf-out"></div></div>`;
   const M=monthly(12);
   chart('ch-trend',{data:{labels:M.map(m=>m.label), datasets:[
