@@ -9,8 +9,8 @@ head='''<!DOCTYPE html>
 <meta name="theme-color" content="#f2f3ef">
 <meta name="description" content="Statistiche, forma fisica e consigli per le tue uscite in bici.">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon-192.png?v=ldm" type="image/png">
-<link rel="apple-touch-icon" href="apple-touch-icon.png?v=ldm">
+<link rel="icon" href="icon-192.png?v=ldm2" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=ldm2">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -62,9 +62,9 @@ open('manifest.webmanifest','w').write('''{
     "params": {"files": [{"name": "files", "accept": [".fit", ".gpx", ".tcx", ".gz", ".zip", "application/octet-stream", "application/gpx+xml", "application/vnd.ant.fit", "application/xml", "text/xml", "application/zip", "application/gzip", "*/*"]}]}
   },
   "icons": [
-    {"src": "icon-192.png?v=ldm", "sizes": "192x192", "type": "image/png"},
-    {"src": "icon-512.png?v=ldm", "sizes": "512x512", "type": "image/png"},
-    {"src": "icon-maskable-512.png?v=ldm", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+    {"src": "icon-192.png?v=ldm2", "sizes": "192x192", "type": "image/png"},
+    {"src": "icon-512.png?v=ldm2", "sizes": "512x512", "type": "image/png"},
+    {"src": "icon-maskable-512.png?v=ldm2", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
   ]
 }
 ''')
