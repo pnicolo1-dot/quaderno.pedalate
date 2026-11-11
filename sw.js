@@ -1,5 +1,5 @@
-// Quaderno Pedalate: funziona anche offline. Versione 202611112146
-const CACHE = 'qp-202611112146';
+// Quaderno Pedalate: funziona anche offline. Versione 202611112147
+const CACHE = 'qp-202611112147';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png',
   'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js',
   'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'];

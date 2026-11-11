@@ -6,7 +6,7 @@ head='''<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#121212">
+<meta name="theme-color" content="#f2f3ef">
 <meta name="description" content="Statistiche, forma fisica e consigli per le tue uscite in bici.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png?v=ldm" type="image/png">
@@ -53,8 +53,8 @@ open('manifest.webmanifest','w').write('''{
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#121212",
-  "theme_color": "#121212",
+  "background_color": "#f2f3ef",
+  "theme_color": "#f2f3ef",
   "icons": [
     {"src": "icon-192.png?v=ldm", "sizes": "192x192", "type": "image/png"},
     {"src": "icon-512.png?v=ldm", "sizes": "512x512", "type": "image/png"},
