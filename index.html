@@ -190,6 +190,18 @@ table.imp th small{display:block;font-weight:400;font-size:11px;color:var(--mute
 .bars i{display:block;width:70%;min-height:2px;background:var(--accent);border-radius:4px 4px 0 0}.bars span{color:var(--muted)}.bars b{font-size:12px}
 ul.src{padding-left:18px}ul.src li{margin:6px 0}ul.src a{color:var(--info)}
 @media (max-width:560px){.pw{grid-template-columns:1fr}}
+.feed{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;cursor:pointer;margin-bottom:12px}
+.feed:hover,.feed:focus-visible{border-color:var(--accent);outline:none}
+.feed .fh{display:flex;gap:12px;align-items:center;padding:14px 16px 4px}.feed .fh .avatar{width:44px;height:44px;flex:none;border-radius:10px}
+.feed .fh b{display:block;font-size:16px}.feed .fh small{display:block;color:var(--muted);font-size:13px}.feed .fh .ty{display:flex;gap:6px;align-items:center;margin-top:2px}
+.feed .ft{font-family:var(--f-display);font-size:24px;font-weight:700;margin:8px 16px 6px;text-transform:none;letter-spacing:0;color:var(--fg)}
+.feed .fk{display:flex;gap:28px;padding:0 16px 12px;flex-wrap:wrap}.feed .fk small{display:block;color:var(--muted);font-size:13px}.feed .fk b{font-size:22px;font-variant-numeric:tabular-nums}
+.feed .fm{position:relative}
+.smap{position:relative;width:100%;overflow:hidden;background:#1d2228}.smap img{position:absolute;max-width:none;display:block}.smap>svg{position:absolute;inset:0;width:100%;height:100%}
+.smap.svgonly svg{position:static}.smap.spin svg{position:static;width:64px;height:64px}.smap.spin{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;aspect-ratio:640/220;background:var(--surface2);color:var(--muted);font-size:13px}
+.fplay{position:absolute;left:12px;bottom:12px;width:52px;height:52px;border-radius:12px;background:rgba(0,0,0,.6);border:none;display:grid;place-items:center;padding:0}
+.feed .ff{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:10px 16px 14px;font-size:13px;color:var(--muted)}.feed .ff .with{display:inline-flex;align-items:center;gap:4px}
+@media (max-width:560px){.feed .ft{font-size:21px}.feed .fk{gap:20px}.feed .fk b{font-size:20px}}
 </style>
 
 </head>
@@ -1152,15 +1164,59 @@ function actCard(a){
     <div class="m">${esc(fmtDate(a.start))} · ${fmtTime(a.start)}${((a.photoIds||[]).length+(a.photoUrls||[]).length)?` · <span class="cam">${(a.photoIds||[]).length+(a.photoUrls||[]).length} foto</span>`:''}</div>
     <div class="k"><span>${nf(a.distance/1000,1)}<small>km</small></span><span>${nf(a.gain)}<small>m D+</small></span><span>${fmtDur(a.moving)}</span>${a.avgPw?`<span>${nf(a.avgPw)}<small>W</small></span>`:''}${a.avgHr?`<span>${nf(a.avgHr)}<small>bpm</small></span>`:''}</div></div></button>`;
 }
+/* ====================== schede uscita stile Strava (mappa scura statica) ====================== */
+function whenLabel(ms){ const d0=dayStart(Date.now()), d=dayStart(ms), t=fmtTime(ms);
+  if(d===d0) return 'Oggi alle '+t; if(d===d0-DAY) return 'Ieri alle '+t;
+  const o={day:'numeric', month:'long'}; if(new Date(ms).getFullYear()!==new Date().getFullYear()) o.year='numeric';
+  return new Date(ms).toLocaleDateString('it-IT',o)+' alle '+t; }
+function staticMap(track, W=640, H=320, opt={}){
+  const T=(track||[]).filter(p=>p&&isFinite(p[0])&&isFinite(p[1])); if(T.length<2) return '';
+  const px=(lat,lon,z)=>{ const s=256*2**z, x=(lon+180)/360*s, sn=Math.sin(lat*Math.PI/180); return [x, (0.5-Math.log((1+sn)/(1-sn))/(4*Math.PI))*s]; };
+  let la0=90,la1=-90,lo0=180,lo1=-180; for(const [la,lo] of T){ if(la<la0)la0=la; if(la>la1)la1=la; if(lo<lo0)lo0=lo; if(lo>lo1)lo1=lo; }
+  // zoom frazionario: il percorso riempie la mappa (tile del livello intero, ingranditi)
+  const a0=px(la1,lo0,0), b0=px(la0,lo1,0), dx=Math.max(1e-9,b0[0]-a0[0]), dy=Math.max(1e-9,b0[1]-a0[1]);
+  const zf=Math.max(2, Math.min(16, Math.log2((W-70)/dx), Math.log2((H-60)/dy))), z=Math.floor(zf), k=2**(zf-z), TS=256*k;
+  const pz=(la,lo)=>{ const q=px(la,lo,z); return [q[0]*k,q[1]*k]; };
+  const a=pz(la1,lo0), b=pz(la0,lo1), cx=(a[0]+b[0])/2, cy=(a[1]+b[1])/2, X0=cx-W/2, Y0=cy-H/2;
+  let tiles=''; const n=2**z;
+  for(let tx=Math.floor(X0/TS); tx<=Math.floor((X0+W)/TS); tx++) for(let ty=Math.floor(Y0/TS); ty<=Math.floor((Y0+H)/TS); ty++){
+    if(ty<0||ty>=n) continue; const wx=((tx%n)+n)%n, sd='abcd'[(wx+ty)%4];
+    tiles+=`<img loading="lazy" decoding="async" alt="" src="https://${sd}.basemaps.cartocdn.com/dark_all/${z}/${wx}/${ty}@2x.png" style="left:${((tx*TS-X0)/W*100).toFixed(3)}%;top:${((ty*TS-Y0)/H*100).toFixed(3)}%;width:${(TS/W*100+0.05).toFixed(3)}%;height:${(TS/H*100+0.05).toFixed(3)}%">`; }
+  const P=T.map(([la,lo])=>{ const q=pz(la,lo); return [(q[0]-X0).toFixed(1),(q[1]-Y0).toFixed(1)]; });
+  const d='M'+P.map(p=>p.join(',')).join('L'), s=P[0], e=P[P.length-1], mid=P[Math.floor(P.length*0.45)];
+  const medal=opt.medal!=null? `<g transform="translate(${mid[0]-24} ${mid[1]-26})">${medalSVG(opt.medal,48).replace('<svg ','<svg x="0" y="0" ')}</g>` : '';
+  return `<div class="smap" style="aspect-ratio:${W}/${H}">${tiles}<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+    <path d="${d}" fill="none" stroke="#000" stroke-opacity=".45" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="${d}" fill="none" stroke="#fc5200" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${e[0]}" cy="${e[1]}" r="6.5" fill="#e34a33" stroke="#fff" stroke-width="2"/><circle cx="${s[0]}" cy="${s[1]}" r="7.5" fill="#43c25a" stroke="#fff" stroke-width="2"/>${medal}</svg></div>`;
+}
+const BIKE_IC='<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="16.5" r="3.5"/><circle cx="18.5" cy="16.5" r="3.5"/><path d="M5.5 16.5 9 9h6l3.5 7.5M9 9 12 16.5h1.5L15 9M14 6h2.5"/></svg>';
+function feedCard(a, gmap){
+  const spin=kindOf(a)==='spin', hasMap=!spin && a.track && a.track.length>1;
+  const ms=(state.medals||{})[a.id]||[], best=ms.length? Math.min(...ms.map(m=>m.rank)) : null;
+  const nph=(a.photoIds||[]).length+(a.photoUrls||[]).length, g=gmap&&gmap.get(a.id);
+  const typ=spin? 'Spinning' : a.sub&&SUB_L[a.sub]? SUB_L[a.sub] : a.sport!=='ride'? SPORT_L[a.sport] : 'Bici';
+  const map= hasMap? (EMBEDDED? `<div class="smap svgonly">${routeSVG(a.track,640,320,false)}</div>` : staticMap(a.track,640,320,{medal:best})) : spin? `<div class="smap spin">${spinSVG(72,72)}<span>Allenamento indoor</span></div>` : '';
+  return `<article class="feed" data-open="${a.id}" tabindex="0" role="link" aria-label="${esc(a.name)}">
+    <div class="fh">${avatarHTML(false)}<div style="min-width:0"><b>${esc(fullName()||'Tu')}</b><small>${esc(whenLabel(a.start))} · ${esc(a.source||'')}</small><small class="ty">${BIKE_IC}${esc(typ)}${a.isExample?' · esempio':''}</small></div></div>
+    <h3 class="ft">${esc(a.name)}</h3>
+    <div class="fk"><div><small>Distanza</small><b>${nf(a.distance/1000,2)} km</b></div><div><small>Dislivello</small><b>${nf(a.gain)} m</b></div><div><small>Tempo</small><b>${fmtHM(a.moving)}</b></div></div>
+    ${map? `<div class="fm">${map}${hasMap&&!EMBEDDED?`<button class="fplay" data-fly="${a.id}" aria-label="Guarda in 3D"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M8 5.5v13l10.5-6.5z" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg></button>`:''}</div>` : ''}
+    <div class="ff">${ms.length? `${medalsRow(a,3)}<span>${ms.length===1? medalLabel(ms[0]) : ms.length+' risultati'}</span>` : ''}${a.avgHr?`<span>♥ ${nf(a.avgHr)} bpm</span>`:''}${a.avgPw?`<span>${nf(a.avgPw)} W</span>`:''}${nph?`<span class="cam">${nph} foto</span>`:''}${g?`<span class="with">${g.with.map(w=>personAvatar(w.p,22)).join('')} con ${esc(g.with[0].p.name.split(' ')[0])}${g.with.length>1?' e altri '+(g.with.length-1):''}</span>`:''}</div>
+  </article>`;
+}
+document.addEventListener('click',e=>{ const f=e.target.closest('[data-fly]'); if(f){ e.stopPropagation(); e.preventDefault(); const a=state.acts.find(x=>x.id===f.dataset.fly); if(a) openFly(a); } }, true);
+document.addEventListener('keydown',e=>{ if(e.key==='Enter' && e.target.matches && e.target.matches('article[data-open]')) e.target.click(); });
 function renderAttivita(){
   const v=$('#v-attivita');
   const q=state.q.toLowerCase();
   const list=(state.filter==='all'? state.acts.filter(a=>state.kind==='all'||kindOf(a)===state.kind) : cycling()).filter(a=>!q || a.name.toLowerCase().includes(q));
+  const gmap=new Map(groupRides().map(x=>[x.a.id,x]));
   const months=new Map(); for(const a of list){ const k=new Date(a.start).toLocaleDateString('it-IT',{month:'long',year:'numeric'}); if(!months.has(k)) months.set(k,[]); months.get(k).push(a); }
   v.innerHTML=`${exampleBanner()}<div class="toolbar" style="justify-content:space-between"><h1>Attività</h1>
     <div class="toolbar"><input type="search" id="q" placeholder="Cerca per nome" value="${esc(state.q)}" aria-label="Cerca">
     <select id="flt" aria-label="Sport"><option value="ride"${state.filter==='ride'?' selected':''}>Solo bici</option><option value="all"${state.filter==='all'?' selected':''}>Anche altri sport</option></select></div></div>${kindBar()}<div id="cal-wrap">${calendarHTML()}</div>
-    ${list.length? [...months].map(([m,arr])=>{ const km=arr.reduce((s,a)=>s+a.distance,0)/1000, g=arr.reduce((s,a)=>s+a.gain,0); return `<div class="list"><h3>${esc(m)} · <span class="num">${nf(km)} km · ${nf(g)} m</span></h3>${arr.map(actCard).join('')}</div>`; }).join('') : '<div class="panel empty">Nessuna attività trovata.</div>'}`;
+    ${list.length? [...months].map(([m,arr])=>{ const km=arr.reduce((s,a)=>s+a.distance,0)/1000, g=arr.reduce((s,a)=>s+a.gain,0); return `<div class="list"><h3>${esc(m)} · <span class="num">${nf(km)} km · ${nf(g)} m</span></h3>${arr.map(a=>feedCard(a,gmap)).join('')}</div>`; }).join('') : '<div class="panel empty">Nessuna attività trovata.</div>'}`;
 }
 function zonesHTML(z, names, colorVar){ const tot=z.reduce((a,b)=>a+b,0)||1; return `<div class="zones">${z.map((s,i)=>`<div class="zone"><span>${names[i]}</span><span class="b"><i style="width:${(s/tot*100).toFixed(1)}%;background:var(${colorVar});opacity:${0.35+0.65*(i+1)/z.length}"></i></span><span class="v">${nf(s/tot*100)}% · ${s>=3600?fmtHM(s):Math.round(s/60)+'m'}</span></div>`).join('')}</div>`; }
 function actInsights(a){
@@ -2025,7 +2081,7 @@ try{ const mq=matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('c
 })();
 </script>
 <script>
-window.APP_VERSION='202611100627';
+window.APP_VERSION='202611112138';
 if('serviceWorker' in navigator && location.protocol==='https:'){
   const had=!!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js?v='+APP_VERSION).then(reg=>{
