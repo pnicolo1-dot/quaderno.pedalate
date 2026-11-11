@@ -55,6 +55,12 @@ open('manifest.webmanifest','w').write('''{
   "orientation": "portrait",
   "background_color": "#f2f3ef",
   "theme_color": "#f2f3ef",
+  "share_target": {
+    "action": "./?share=1",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {"files": [{"name": "files", "accept": [".fit", ".gpx", ".tcx", ".gz", ".zip", "application/octet-stream", "application/gpx+xml", "application/vnd.ant.fit", "application/xml", "text/xml", "application/zip", "application/gzip", "*/*"]}]}
+  },
   "icons": [
     {"src": "icon-192.png?v=ldm", "sizes": "192x192", "type": "image/png"},
     {"src": "icon-512.png?v=ldm", "sizes": "512x512", "type": "image/png"},
@@ -71,6 +77,17 @@ self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c =>
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
   const req = e.request, url = new URL(req.url);
+  // file condivisi da un'altra app (BiNavi, Garmin, Wahoo...): li parcheggio e apro la pagina Importa
+  if (req.method === 'POST' && url.origin === location.origin && url.searchParams.has('share')) {
+    e.respondWith((async () => {
+      try {
+        const fd = await req.formData(), c = await caches.open('qp-share'); let i = 0;
+        for (const f of fd.getAll('files')) { if (f && f.size) await c.put('./__share/' + Date.now() + '-' + (i++) + '?name=' + encodeURIComponent(f.name || 'attivita'), new Response(f)); }
+      } catch (err) {}
+      return Response.redirect('./#importa-condivisi', 303);
+    })());
+    return;
+  }
   if (req.method !== 'GET' || url.hostname.endsWith('strava.com')) return;
   if (req.mode === 'navigate') {
     // Pagina: prima la rete (aggiornamenti), se offline la copia salvata

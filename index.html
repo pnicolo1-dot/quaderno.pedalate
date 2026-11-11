@@ -1448,6 +1448,9 @@ function renderImporta(){
     <span class="small muted">.fit · .gpx · .tcx (anche .gz) · archivio .zip esportato da Strava · puoi selezionarne tanti insieme</span>
     <input type="file" id="file" multiple accept=".fit,.gpx,.tcx,.gz,.zip" hidden>
   </label>
+  <div class="panel"><h3>Senza Strava: condividi il file</h3>
+    <p class="small">${IS_IOS? `Su iPhone: nell'app del ciclocomputer o del GPS scegli <b>Esporta</b> o <b>Condividi</b> il file GPX/FIT e <b>Salva su File</b>. Poi qui sopra tocca il riquadro e scegli il file.` : `Su Android, nell'app del ciclocomputer (BiNavi, Garmin, Wahoo, Bryton…) o di Strava sul computer, scegli <b>Condividi</b> o <b>Esporta</b> il file GPX/FIT dell'uscita e poi <b>Pedalate</b>: l'uscita entra da sola. Se Pedalate non compare, salva il file e sceglilo qui sopra.`}</p>
+    <p class="small muted">Dal sito di Strava, su un'uscita: menu "…" → <b>Esporta GPX</b> o <b>Esporta originale</b>. Per tutto lo storico in un colpo: Impostazioni → Il mio account → <b>Scarica o elimina il tuo account</b> → richiedi l'archivio ZIP e importalo qui.</p></div>
   <div class="progress" id="imp-bar"><i></i></div>
   <div class="log" id="imp-log" aria-live="polite">${state.log.slice(0,200).map(l=>`<div class="${l.cls}">${esc(l.t)}</div>`).join('')}</div>
   <div class="grid2">
@@ -2174,7 +2177,11 @@ try{ const mq=matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('c
   recompute();
   try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
   const back=await stravaHandleRedirect();
-  const h=location.hash.slice(1); show(back? 'importa' : VIEWS.includes(h)? h : 'riepilogo');
+  const h=location.hash.slice(1).replace(/-.*/,''); show(back? 'importa' : VIEWS.includes(h)? h : 'riepilogo');
+  // file arrivati con "Condividi" da un'altra app
+  try{ if(window.caches){ const c=await caches.open('qp-share'), ks=await c.keys();
+    if(ks.length){ const files=[]; for(const k of ks){ const r=await c.match(k); const nm=new URL(k.url).searchParams.get('name')||'attivita'; files.push(new File([await r.blob()], nm)); await c.delete(k); }
+      history.replaceState(null,'','#importa'); show('importa'); await importFiles(files); } } }catch(e){}
   const autoSync=()=>{ if(!EMBEDDED && STRAVA.refresh && navigator.onLine!==false && (STRAVA.queue.length || Date.now()-(STRAVA.lastSync||0)>5*60000)) stravaSync('new'); };
   if(!back) autoSync();
   // ogni volta che riapri l'app (o torni su di essa) controlla se ci sono uscite nuove su Strava
@@ -2184,7 +2191,7 @@ try{ const mq=matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('c
 })();
 </script>
 <script>
-window.APP_VERSION='202611112147';
+window.APP_VERSION='202611112156';
 if('serviceWorker' in navigator && location.protocol==='https:'){
   const had=!!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js?v='+APP_VERSION).then(reg=>{
