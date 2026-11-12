@@ -98,7 +98,8 @@ p{margin:0}
 .banner{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--accent-soft);border:1px solid var(--accent);border-radius:var(--r);padding:12px 14px}
 .banner p{flex:1 1 260px}
 button,.btn{font:inherit;font-weight:600;border-radius:8px;border:1px solid var(--line);background:var(--surface2);color:var(--fg);padding:8px 14px;cursor:pointer}
-button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+a.btn{text-decoration:none;display:inline-block}
+button.primary,.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 button.danger{color:var(--bad);border-color:var(--bad);background:transparent}
 button:hover{filter:brightness(1.06)}
 .chart{position:relative;height:220px;width:100%}
@@ -1319,7 +1320,7 @@ function renderAttivita(){
   const list=(state.filter==='all'? state.acts.filter(a=>state.kind==='all'||kindOf(a)===state.kind) : cycling()).filter(a=>!q || a.name.toLowerCase().includes(q));
   const gmap=new Map(groupRides().map(x=>[x.a.id,x]));
   const months=new Map(); for(const a of list){ const k=new Date(a.start).toLocaleDateString('it-IT',{month:'long',year:'numeric'}); if(!months.has(k)) months.set(k,[]); months.get(k).push(a); }
-  v.innerHTML=`${exampleBanner()}<div class="toolbar" style="justify-content:space-between"><h1>Attività</h1><button class="primary" id="add-gpx">+ Aggiungi da Strava</button>
+  v.innerHTML=`${exampleBanner()}<div class="toolbar" style="justify-content:space-between"><h1>Attività</h1><a class="btn primary" id="add-gpx" href="https://www.strava.com/athlete/training" target="_blank" rel="noopener">+ Aggiungi da Strava</a>
     <div class="toolbar"><input type="search" id="q" placeholder="Cerca per nome" value="${esc(state.q)}" aria-label="Cerca">
     <select id="flt" aria-label="Sport"><option value="ride"${state.filter==='ride'?' selected':''}>Solo bici</option><option value="all"${state.filter==='all'?' selected':''}>Anche altri sport</option></select></div></div>${kindBar()}<div id="cal-wrap">${calendarHTML()}</div>
     ${list.length? [...months].map(([m,arr])=>{ const km=arr.reduce((s,a)=>s+a.distance,0)/1000, g=arr.reduce((s,a)=>s+a.gain,0); return `<div class="list"><h3>${esc(m)} · <span class="num">${nf(km)} km · ${nf(g)} m</span></h3>${arr.map(a=>feedCard(a,gmap)).join('')}</div>`; }).join('') : '<div class="panel empty">Nessuna attività trovata.</div>'}`;
@@ -2180,7 +2181,7 @@ document.addEventListener('click',e=>{
   const r=e.target.closest('[data-range]'); if(r){ state.range=+r.dataset.range; document.querySelectorAll('[data-range]').forEach(b=>b.setAttribute('aria-pressed', b===r)); drawFitChart(); }
 });
 document.addEventListener('input',e=>{ if(e.target.id==='q'){ state.q=e.target.value; const pos=e.target.selectionStart; renderAttivita(); const q=$('#q'); q.focus(); q.setSelectionRange(pos,pos); } });
-document.addEventListener('click',e=>{ if(e.target.closest('#add-gpx')){ go('importa'); setTimeout(()=>{ const p=$('#gpx-panel'); if(p){ p.scrollIntoView({behavior:'smooth', block:'start'}); p.classList.add('flash'); setTimeout(()=>p.classList.remove('flash'),1600); } },80); } });
+document.addEventListener('click',e=>{ if(e.target.closest('#add-gpx')){ /* il link apre Strava; intanto qui preparo i passi per importare il GPX */ go('importa'); setTimeout(()=>{ const p=$('#gpx-panel'); if(p){ p.scrollIntoView({behavior:'smooth', block:'start'}); p.classList.add('flash'); setTimeout(()=>p.classList.remove('flash'),1600); } },80); } });
 document.addEventListener('change',e=>{ if(e.target.id==='flt'){ state.filter=e.target.value; renderAttivita(); } });
 try{ const mq=matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('change',()=>renderAll()); new MutationObserver(()=>renderAll()).observe(document.documentElement,{attributes:true, attributeFilter:['data-theme']}); }catch(e){}
 
@@ -2206,7 +2207,7 @@ try{ const mq=matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('c
 })();
 </script>
 <script>
-window.APP_VERSION='202611120623';
+window.APP_VERSION='202611120645';
 if('serviceWorker' in navigator && location.protocol==='https:'){
   const had=!!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js?v='+APP_VERSION).then(reg=>{
