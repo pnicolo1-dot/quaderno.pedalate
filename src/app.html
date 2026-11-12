@@ -192,6 +192,7 @@ ul.src{padding-left:18px}ul.src li{margin:6px 0}ul.src a{color:var(--info)}
 .climb .cl-n,.climb .cl-v{display:flex;flex-direction:column;min-width:0}.climb .cl-v{text-align:right;white-space:nowrap}.climb small{color:var(--muted);font-size:12px}.climb .rank{margin:0 12px}.cl-ren{margin:6px 12px 12px}.cl-edit{display:flex;gap:8px;margin:6px 12px 12px}.cl-edit input{flex:1;min-width:0}
 table.gt tbody th small{display:block;font-size:11px;color:var(--muted);font-weight:400}
 .steps{padding-left:20px;display:grid;gap:12px}.steps li{padding-left:4px}.steps .btn{display:inline-block;margin-bottom:4px}.gpxrow{display:flex;gap:8px;flex-wrap:wrap}.gpxrow input{flex:1;min-width:180px}
+#gpx-panel{scroll-margin-top:130px}.flash{animation:flash 1.6s}@keyframes flash{0%,60%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:none}}
 </style>
 
 <header class="top"><div class="wrap bar">
@@ -1302,7 +1303,7 @@ function renderAttivita(){
   const list=(state.filter==='all'? state.acts.filter(a=>state.kind==='all'||kindOf(a)===state.kind) : cycling()).filter(a=>!q || a.name.toLowerCase().includes(q));
   const gmap=new Map(groupRides().map(x=>[x.a.id,x]));
   const months=new Map(); for(const a of list){ const k=new Date(a.start).toLocaleDateString('it-IT',{month:'long',year:'numeric'}); if(!months.has(k)) months.set(k,[]); months.get(k).push(a); }
-  v.innerHTML=`${exampleBanner()}<div class="toolbar" style="justify-content:space-between"><h1>Attività</h1>
+  v.innerHTML=`${exampleBanner()}<div class="toolbar" style="justify-content:space-between"><h1>Attività</h1><button class="primary" id="add-gpx">+ Aggiungi da Strava</button>
     <div class="toolbar"><input type="search" id="q" placeholder="Cerca per nome" value="${esc(state.q)}" aria-label="Cerca">
     <select id="flt" aria-label="Sport"><option value="ride"${state.filter==='ride'?' selected':''}>Solo bici</option><option value="all"${state.filter==='all'?' selected':''}>Anche altri sport</option></select></div></div>${kindBar()}<div id="cal-wrap">${calendarHTML()}</div>
     ${list.length? [...months].map(([m,arr])=>{ const km=arr.reduce((s,a)=>s+a.distance,0)/1000, g=arr.reduce((s,a)=>s+a.gain,0); return `<div class="list"><h3>${esc(m)} · <span class="num">${nf(km)} km · ${nf(g)} m</span></h3>${arr.map(a=>feedCard(a,gmap)).join('')}</div>`; }).join('') : '<div class="panel empty">Nessuna attività trovata.</div>'}`;
@@ -1351,6 +1352,7 @@ function renderDettaglio(){
     ${has('cad')?'<div class="chart short"><canvas id="ch-cad"></canvas></div>':''}
   </div>
   ${dataPanel(a)}
+  ${a.stravaId && !EMBEDDED? `<div class="toolbar"><a class="btn" href="https://www.strava.com/activities/${a.stravaId}" target="_blank" rel="noopener">Apri su Strava</a><a class="btn" href="https://www.strava.com/activities/${a.stravaId}/export_gpx" target="_blank" rel="noopener">Scarica GPX</a></div>` : ''}
   ${actClimbsHTML(a)}
   ${splitsHTML(a)}
   ${(()=>{ const g=groupRides().find(x=>x.a.id===a.id); return g? `<div class="panel"><h3>Con i tuoi amici</h3>${groupTable(a,g.with)}</div>` : ''; })()}
@@ -1433,7 +1435,7 @@ function renderImporta(){
     <span class="small muted">.fit · .gpx · .tcx (anche .gz) · archivio .zip esportato da Strava · puoi selezionarne tanti insieme</span>
     <input type="file" id="file" multiple accept=".fit,.gpx,.tcx,.gz,.zip" hidden>
   </label>
-  <div class="panel"><h3>Scarica il GPX da Strava</h3>
+  <div class="panel" id="gpx-panel"><h3>Scarica il GPX da Strava</h3>
     <ol class="steps small">
       <li><a class="btn" href="https://www.strava.com/athlete/training" target="_blank" rel="noopener">Apri le mie attività su Strava</a><br>Si apre il sito di Strava: tocca l'uscita che vuoi e copia il link dalla barra degli indirizzi (oppure nell'app Strava: Condividi → Copia link).</li>
       <li><span class="gpxrow"><input type="url" id="gpx-link" placeholder="Incolla qui il link dell'uscita" aria-label="Link dell'uscita su Strava"><button class="primary" id="gpx-go">Scarica GPX</button></span><span id="gpx-msg" class="muted"></span></li>
@@ -2162,6 +2164,7 @@ document.addEventListener('click',e=>{
   const r=e.target.closest('[data-range]'); if(r){ state.range=+r.dataset.range; document.querySelectorAll('[data-range]').forEach(b=>b.setAttribute('aria-pressed', b===r)); drawFitChart(); }
 });
 document.addEventListener('input',e=>{ if(e.target.id==='q'){ state.q=e.target.value; const pos=e.target.selectionStart; renderAttivita(); const q=$('#q'); q.focus(); q.setSelectionRange(pos,pos); } });
+document.addEventListener('click',e=>{ if(e.target.closest('#add-gpx')){ go('importa'); setTimeout(()=>{ const p=$('#gpx-panel'); if(p){ p.scrollIntoView({behavior:'smooth', block:'start'}); p.classList.add('flash'); setTimeout(()=>p.classList.remove('flash'),1600); } },80); } });
 document.addEventListener('change',e=>{ if(e.target.id==='flt'){ state.filter=e.target.value; renderAttivita(); } });
 try{ const mq=matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('change',()=>renderAll()); new MutationObserver(()=>renderAll()).observe(document.documentElement,{attributes:true, attributeFilter:['data-theme']}); }catch(e){}
 
