@@ -297,6 +297,7 @@ function tss(a){
   return a.moving/3600*45;
 }
 function kcal(a){
+  if(a.lesson && a.lesson.kcal) return a.lesson.kcal;
   if(a.avgPw && a.pwSec) return a.avgPw*a.pwSec/1000/(4.184*0.24);
   if(a.avgHr){ const w=profile.weight, g=profile.age; const perMin = profile.sex==='f' ? (-20.4022+0.4472*a.avgHr-0.1263*w+0.074*g)/4.184 : (-55.0969+0.6309*a.avgHr+0.1988*w+0.2017*g)/4.184; return Math.max(0, perMin*a.moving/60); }
   return null;
@@ -512,6 +513,74 @@ function parseCSV(text){
   if(f||row.length){ row.push(f); rows.push(row); }
   return rows;
 }
+/* ====================== lezioni di spinning dal PDF "HR FitGroup" ====================== */
+let pdfjsP=null;
+function loadPdfJs(){
+  if(window.pdfjsLib) return Promise.resolve();
+  if(pdfjsP) return pdfjsP;
+  pdfjsP=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+    s.onload=()=>{ if(!window.pdfjsLib){ pdfjsP=null; return rej(new Error('lettore PDF non caricato')); } pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'; res(); };
+    s.onerror=()=>{ pdfjsP=null; rej(new Error('per leggere i PDF serve internet')); }; document.head.append(s); });
+  return pdfjsP;
+}
+async function pdfText(buf){
+  await loadPdfJs();
+  const doc=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise; let out='';
+  for(let p=1;p<=doc.numPages;p++){ const tc=await (await doc.getPage(p)).getTextContent(); out+=tc.items.map(i=>i.str+(i.hasEOL?'\n':' ')).join('')+'\n'; }
+  return out;
+}
+const toSec=t=>{ const p=String(t).split(':').map(Number); return p.length===3? p[0]*3600+p[1]*60+p[2] : p[0]*60+p[1]; };
+function parseLessonText(T){
+  const t=T.replace(/[ \t]+/g,' ');
+  const g=(re,f=x=>+x)=>{ const m=t.match(re); return m? f(m[1]) : null; };
+  const d=t.match(/Report lezione\s*·\s*(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(!d) throw new Error('non sembra un report di lezione HR FitGroup');
+  const dur=g(/(\d{1,2}:\d{2}(?::\d{2})?)\s*Durata\b/, toSec) || g(/Durata della lezione\s*(\d{1,2}:\d{2}(?::\d{2})?)/, toSec);
+  if(!dur) throw new Error('durata della lezione non trovata');
+  const fcRef=g(/FC max reale[^:]*:\s*(\d{2,3})\s*bpm/) || g(/FC max teorica[^:]*:\s*(\d{2,3})\s*bpm/) || hrMaxEff();
+  const zones=[]; const zr=/Z(\d)\s+([A-Za-zÀ-ú]+)\s+[<>]?\s*(\d{2})(?:\s*-\s*(\d{2,3}))?%\s+(\d{1,2}:\d{2})\s+(\d{1,3})%/g; let m;
+  while((m=zr.exec(t))) zones.push({z:+m[1], n:m[2], lo:+m[3], hi:m[4]? +m[4] : null, secs:toSec(m[5]), pct:+m[6], below:/<\s*\d/.test(m[0])});
+  const name=(t.trim().split('\n')[0]||'').trim();
+  const pos=t.match(/(\d+)°\s*su\s*(\d+)\s*Posizione/);
+  const L={source:'HR FitGroup', fcRef, avgHr:g(/(\d{2,3})\s*bpm\s*FC media/), maxHr:g(/(\d{2,3})\s*bpm\s*FC massima/), minHr:g(/(\d{2,3})\s*bpm\s*FC minima/),
+    kcal:g(/(\d{2,4})\s*kcal\s*Calorie/), hrp:g(/([\d.,]+)\s*HRP\b/, x=>+x.replace(',','.')), trimp:g(/Edwards[^0-9]*(\d{1,4})/), pos: pos? `${pos[1]}° su ${pos[2]}` : null,
+    intensity:g(/(\d{2,3})%\s*FCmax\s*Intensità media/), zones, dur, athlete:name,
+    summary:(t.match(/Sintesi della lezione\s*([\s\S]*?)\s*Rispetto della lezione\s*\n/)||[])[1]||null,
+    advice:(t.match(/Consigli per la prossima lezione\s*([\s\S]*?)\s*Complimenti/)||[])[1]||null,
+    lessonNo:g(/lezione numero (\d+)/)};
+  const start=new Date(+d[3], +d[2]-1, +d[1], 19, 0).getTime();
+  return {L, start};
+}
+function lessonToAct(L, start){
+  // istogramma del battito ricostruito dai tempi nelle zone (al centro di ogni fascia)
+  const hist=new Array(230).fill(0); let s2=0, hs=0;
+  for(const z of L.zones){ const pc= z.below? z.lo-5 : z.hi? (z.lo+z.hi)/2 : z.lo+5; const b=Math.round(pc/100*L.fcRef); if(b>=0&&b<230){ hist[b]+=z.secs; s2+=z.secs*b*b; hs+=z.secs; } }
+  const k=hs&&L.avgHr? 1 : 1;
+  return {id:'l'+Math.round(start/1000), name:'Lezione di spinning'+(L.lessonNo?` n. ${L.lessonNo}`:''), sport:'ride', sub:'indoor', indoor:true, source:'HR FitGroup', start,
+    distance:0, moving:L.dur, elapsed:L.dur, gain:0, maxAlt:null, minAlt:null, avgSpd:0, maxSpd:0, avgHr:L.avgHr, maxHr:L.maxHr, avgPw:null,
+    hrSec:hs||null, sumHr2:hs? s2*k : null, hrHist:hs? hist : null, prof:{d:[],t:[],alt:[],spd:[],hr:[],pw:[],cad:[]}, track:[], lesson:L, timeUnknown:true};
+}
+// se la stessa lezione c'è già (es. registrata con l'orologio su Strava) la arricchisco invece di duplicarla
+function mergeLesson(a){
+  const day=dayStart(a.start);
+  const same=state.acts.find(x=>x!==a && dayStart(x.start)===day && kindOf(x)==='spin' && Math.abs((x.moving||0)-a.moving)<8*60);
+  if(!same) return null;
+  same.lesson=a.lesson; if(!same.hrHist&&a.hrHist){ same.hrHist=a.hrHist; same.hrSec=a.hrSec; same.sumHr2=a.sumHr2; }
+  if(!same.avgHr) same.avgHr=a.avgHr; if(!same.maxHr) same.maxHr=a.maxHr;
+  return same;
+}
+function lessonHTML(a){
+  const L=a.lesson; if(!L) return '';
+  const S=(l,val,u='')=>`<div class="stat"><div class="lab">${l}</div><div class="val">${val}${u?`<small>${u}</small>`:''}</div></div>`;
+  const tot=L.zones.reduce((s,z)=>s+z.secs,0)||1, col=['#9aa39a','#6bb0e8','#2b8a3e','#e6b800','#e8590c','#d6336c'];
+  return `<div class="panel"><h3>Lezione HR FitGroup</h3><div class="stats">
+    ${L.hrp!=null?S('HRP',nf(L.hrp,1)):''}${L.pos?S('Posizione',esc(L.pos)):''}${L.trimp?S('Carico (TRIMP)',nf(L.trimp)):''}${L.intensity?S('Intensità media',L.intensity,'% FCmax'):''}${L.kcal?S('Calorie',nf(L.kcal),'kcal'):''}${L.minHr?S('FC minima',L.minHr,'bpm'):''}</div>
+    ${L.zones.length?`<p class="small muted" style="margin:12px 0 6px">Tempo nelle zone della palestra (su FC max ${L.fcRef} bpm)</p><div class="zones">${L.zones.map((z,i)=>`<div class="zone"><span>Z${z.z} ${esc(z.n)}</span><span class="b"><i style="width:${(z.secs/tot*100).toFixed(1)}%;background:${col[i]||'var(--hr)'}"></i></span><span class="v">${z.pct}% · ${fmtDur(z.secs)}</span></div>`).join('')}</div>`:''}
+    ${L.summary?`<p class="small" style="margin-top:12px">${esc(L.summary.replace(/\s+/g,' '))}</p>`:''}
+    ${L.advice?`<p class="small"><b>Consiglio dell'istruttore:</b> ${esc(L.advice.replace(/\s+/g,' '))}</p>`:''}
+    ${L.maxHr && L.maxHr>hrMaxEff()?`<p class="small c-warn">Hai toccato ${L.maxHr} bpm, più della FC max usata dall'app (${hrMaxEff()}). Se ti capita spesso aggiornala nel Profilo.</p>`:''}
+    <p class="small muted">Ora d'inizio non presente nel PDF: l'ho messa alle 19:00.</p></div>`;
+}
 async function importFiles(files){
   const bar=$('#imp-bar i');
   const say=(t,cls='')=>{ state.log.unshift({t,cls}); const l=$('#imp-log'); if(l){ const d=document.createElement('div'); d.className=cls; d.textContent=t; l.prepend(d); } };
@@ -537,6 +606,7 @@ async function importFiles(files){
         jobs.push({name:e.name, get:()=>e.async('arraybuffer'), meta:mm, media});
       }
     } else if(/\.(fit|gpx|tcx)(\.gz)?$/i.test(n)) jobs.push({name:f.name, get:()=>f.arrayBuffer(), meta:{}});
+    else if(n.endsWith('.pdf') || f.type==='application/pdf') jobs.push({name:f.name, get:()=>f.arrayBuffer(), meta:{}, pdf:true});
     else say(`${f.name}: formato non riconosciuto (servono .fit, .gpx, .tcx o lo ZIP di Strava)`,'c-warn');
   }
   if(!jobs.length){ renderAll(); return; }
@@ -546,6 +616,10 @@ async function importFiles(files){
   for(let i=0;i<jobs.length;i++){
     const j=jobs[i];
     try{
+      if(j.pdf){ const {L,start}=parseLessonText(await pdfText(await j.get())); const a=lessonToAct(L,start); const mg=mergeLesson(a);
+        if(mg){ await DB.put(mg); ok++; say(`✓ Lezione del ${fmtDay(a.start)} aggiunta a "${mg.name}"`); continue; }
+        const key=Math.round(a.start/60000); if(state.acts.some(x=>x.lesson && Math.round(x.start/60000)===key)){ dup++; continue; }
+        state.acts.push(a); await DB.put(a); ok++; say(`✓ ${a.name} · ${fmtDay(a.start)} · ${fmtDur(a.moving)} · FC media ${a.avgHr||'–'}`); continue; }
       const a=await parseAny(j.name, await j.get(), j.meta);
       const key=Math.round(a.start/60000);
       if(have.has(key)||have.has(key-1)||have.has(key+1)){ dup++; }
@@ -1152,6 +1226,7 @@ function openLightbox(ph, i, a){
 }
 
 function dataPanel(a){
+  if(a.lesson && !(a.prof&&a.prof.d&&a.prof.d.length>1)) return "";
   const hasProf=a.prof&&a.prof.d&&a.prof.d.length>1;
   const ch=(on,l)=>`<span class="chip ${on?'c-good':'c-muted'}">${on?'✓':'✗'} ${l}</span>`;
   const items=[[a.track&&a.track.length>1,'GPS'],[!!a.avgHr,'Battito'],[!!a.avgCad,'Cadenza'],[!!a.avgPw,'Potenza'],[a.maxAlt!=null,'Altitudine']];
@@ -1352,6 +1427,7 @@ function renderDettaglio(){
     ${has('pw')?'<div class="chart short"><canvas id="ch-pw"></canvas></div>':''}
     ${has('cad')?'<div class="chart short"><canvas id="ch-cad"></canvas></div>':''}
   </div>
+  ${lessonHTML(a)}
   ${dataPanel(a)}
   ${a.stravaId && !EMBEDDED? `<div class="toolbar"><a class="btn" href="https://www.strava.com/activities/${a.stravaId}" target="_blank" rel="noopener">Apri su Strava</a><a class="btn" ${sweb(`https://www.strava.com/activities/${a.stravaId}/export_gpx`)}>Scarica GPX</a></div>` : ''}
   ${actClimbsHTML(a)}
@@ -1433,9 +1509,10 @@ function renderImporta(){
   <label class="drop" id="drop" for="file">
     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>
     <b>Trascina qui i file o tocca per sceglierli</b>
-    <span class="small muted">.fit · .gpx · .tcx (anche .gz) · archivio .zip esportato da Strava · puoi selezionarne tanti insieme</span>
-    <input type="file" id="file" multiple accept=".fit,.gpx,.tcx,.gz,.zip" hidden>
+    <span class="small muted">.fit · .gpx · .tcx (anche .gz) · archivio .zip esportato da Strava · report PDF delle lezioni di spinning · puoi selezionarne tanti insieme</span>
+    <input type="file" id="file" multiple accept=".fit,.gpx,.tcx,.gz,.zip,.pdf" hidden>
   </label>
+  <div class="panel" id="lesson-panel"><div class="toolbar" style="justify-content:space-between"><div><h3>Lezioni di spinning (PDF)</h3><p class="small muted">Carica il report PDF che ti manda la palestra (HR FitGroup): battito, zone, calorie, HRP e posizione finiscono nell'uscita di spinning di quel giorno.</p></div><label class="btn primary" for="lesson-file">Carica PDF lezione</label></div><input type="file" id="lesson-file" accept=".pdf,application/pdf" multiple hidden></div>
   <div class="panel" id="gpx-panel"><h3>Scarica il GPX da Strava</h3>
     <ol class="steps small">
       <li><a class="btn" ${sweb(`https://www.strava.com/athlete/training`)}>Apri le mie attività su Strava</a><br>Si apre il sito di Strava in Chrome (se non vedi la lista, dal menu ⋮ di Chrome attiva <b>Sito desktop</b>): tocca l'uscita che vuoi e copia il link dalla barra degli indirizzi (oppure nell'app Strava: Condividi → Copia link).</li>
@@ -1465,6 +1542,7 @@ function renderImporta(){
   <div class="panel"><h3>Dati salvati</h3><p class="small">${state.examples? 'Al momento vedi solo dati di esempio: spariranno quando importi la prima attività.' : `${state.acts.length} attività salvate in questo browser.`}</p>
     <p class="small muted">Versione dell'app: ${esc(window.APP_VERSION||'anteprima')}. Gli aggiornamenti arrivano da soli: quando ce n'è uno nuovo compare il pulsante "Aggiorna".</p>
     <div class="toolbar">${state.examples?'':'<button class="danger" id="wipe">Elimina tutte le attività</button>'}<span id="wipec" hidden><span class="small">Sicuro? Non si può annullare. </span><button class="danger" id="wipe-yes">Sì, elimina tutto</button> <button id="wipe-no">Annulla</button></span></div></div>`;
+  const lf=$('#lesson-file'); if(lf) lf.onchange=e=>{ const fs=[...e.target.files]; e.target.value=''; if(fs.length) importFiles(fs); };
   const gg=$('#gpx-go'); if(gg) gg.onclick=()=>{ const v=($('#gpx-link').value||'').trim(), m=v.match(/activities\/(\d+)/)||v.match(/^(\d{6,})$/), msg=$('#gpx-msg');
     if(m){ openStravaWeb('https://www.strava.com/activities/'+m[1]+'/export_gpx'); msg.textContent=' Download avviato: quando finisce tocca "Importa il file scaricato".'; }
     else if(/strava\.app\.link|strava\.com/.test(v)){ openStravaWeb(v); msg.textContent=' Si apre l\'uscita su Strava: copia il nuovo indirizzo (contiene /activities/ e un numero), incollalo qui e tocca di nuovo Scarica GPX.'; }
