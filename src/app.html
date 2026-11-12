@@ -194,6 +194,7 @@ ul.src{padding-left:18px}ul.src li{margin:6px 0}ul.src a{color:var(--info)}
 table.gt tbody th small{display:block;font-size:11px;color:var(--muted);font-weight:400}
 .steps{padding-left:20px;display:grid;gap:12px}.steps li{padding-left:4px}.steps .btn{display:inline-block;margin-bottom:4px}.gpxrow{display:flex;gap:8px;flex-wrap:wrap}.gpxrow input{flex:1;min-width:180px}
 #gpx-panel{scroll-margin-top:130px}.flash{animation:flash 1.6s}@keyframes flash{0%,60%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:none}}
+.lesson-st{margin-top:12px;padding:10px 12px;border-radius:10px;background:var(--surface2);font-size:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.lesson-st.ok{background:var(--accent-soft)}.lesson-st.bad{color:var(--bad);border:1px solid currentColor}
 </style>
 
 <header class="top"><div class="wrap bar">
@@ -565,6 +566,7 @@ function mergeLesson(a){
   const day=dayStart(a.start);
   const same=state.acts.find(x=>x!==a && dayStart(x.start)===day && kindOf(x)==='spin' && Math.abs((x.moving||0)-a.moving)<8*60);
   if(!same) return null;
+  if(same.lesson) return 'dup';
   same.lesson=a.lesson; if(!same.hrHist&&a.hrHist){ same.hrHist=a.hrHist; same.hrSec=a.hrSec; same.sumHr2=a.sumHr2; }
   if(!same.avgHr) same.avgHr=a.avgHr; if(!same.maxHr) same.maxHr=a.maxHr;
   return same;
@@ -617,8 +619,9 @@ async function importFiles(files){
     const j=jobs[i];
     try{
       if(j.pdf){ const {L,start}=parseLessonText(await pdfText(await j.get())); const a=lessonToAct(L,start); const mg=mergeLesson(a);
+        if(mg==='dup'){ dup++; say(`La lezione del ${fmtDay(a.start)} è già presente.`,'c-warn'); continue; }
         if(mg){ await DB.put(mg); ok++; say(`✓ Lezione del ${fmtDay(a.start)} aggiunta a "${mg.name}"`); continue; }
-        const key=Math.round(a.start/60000); if(state.acts.some(x=>x.lesson && Math.round(x.start/60000)===key)){ dup++; continue; }
+        const key=Math.round(a.start/60000); if(state.acts.some(x=>x.lesson && Math.round(x.start/60000)===key)){ dup++; say(`La lezione del ${fmtDay(a.start)} è già presente.`,'c-warn'); continue; }
         state.acts.push(a); await DB.put(a); ok++; say(`✓ ${a.name} · ${fmtDay(a.start)} · ${fmtDur(a.moving)} · FC media ${a.avgHr||'–'}`); continue; }
       const a=await parseAny(j.name, await j.get(), j.meta);
       const key=Math.round(a.start/60000);
@@ -1512,7 +1515,7 @@ function renderImporta(){
     <span class="small muted">.fit · .gpx · .tcx (anche .gz) · archivio .zip esportato da Strava · report PDF delle lezioni di spinning · puoi selezionarne tanti insieme</span>
     <input type="file" id="file" multiple accept=".fit,.gpx,.tcx,.gz,.zip,.pdf" hidden>
   </label>
-  <div class="panel" id="lesson-panel"><div class="toolbar" style="justify-content:space-between"><div><h3>Lezioni di spinning (PDF)</h3><p class="small muted">Carica il report PDF che ti manda la palestra (HR FitGroup): battito, zone, calorie, HRP e posizione finiscono nell'uscita di spinning di quel giorno.</p></div><label class="btn primary" for="lesson-file">Carica PDF lezione</label></div><input type="file" id="lesson-file" accept=".pdf,application/pdf" multiple hidden></div>
+  <div class="panel" id="lesson-panel"><div class="toolbar" style="justify-content:space-between"><div><h3>Lezioni di spinning (PDF)</h3><p class="small muted">Carica il report PDF che ti manda la palestra (HR FitGroup): battito, zone, calorie, HRP e posizione finiscono nell'uscita di spinning di quel giorno.</p></div><label class="btn primary" for="lesson-file">Carica PDF lezione</label></div><input type="file" id="lesson-file" accept=".pdf,application/pdf" multiple hidden><div id="lesson-st" class="lesson-st" role="status" hidden></div></div>
   <div class="panel" id="gpx-panel"><h3>Scarica il GPX da Strava</h3>
     <ol class="steps small">
       <li><a class="btn" ${sweb(`https://www.strava.com/athlete/training`)}>Apri le mie attività su Strava</a><br>Si apre il sito di Strava in Chrome (se non vedi la lista, dal menu ⋮ di Chrome attiva <b>Sito desktop</b>): tocca l'uscita che vuoi e copia il link dalla barra degli indirizzi (oppure nell'app Strava: Condividi → Copia link).</li>
@@ -1542,7 +1545,14 @@ function renderImporta(){
   <div class="panel"><h3>Dati salvati</h3><p class="small">${state.examples? 'Al momento vedi solo dati di esempio: spariranno quando importi la prima attività.' : `${state.acts.length} attività salvate in questo browser.`}</p>
     <p class="small muted">Versione dell'app: ${esc(window.APP_VERSION||'anteprima')}. Gli aggiornamenti arrivano da soli: quando ce n'è uno nuovo compare il pulsante "Aggiorna".</p>
     <div class="toolbar">${state.examples?'':'<button class="danger" id="wipe">Elimina tutte le attività</button>'}<span id="wipec" hidden><span class="small">Sicuro? Non si può annullare. </span><button class="danger" id="wipe-yes">Sì, elimina tutto</button> <button id="wipe-no">Annulla</button></span></div></div>`;
-  const lf=$('#lesson-file'); if(lf) lf.onchange=e=>{ const fs=[...e.target.files]; e.target.value=''; if(fs.length) importFiles(fs); };
+  const lf=$('#lesson-file'); if(lf) lf.onchange=async e=>{ const fs=[...e.target.files]; e.target.value=''; if(!fs.length) return;
+    const st=$('#lesson-st'); st.hidden=false; st.className='lesson-st'; st.textContent=`Leggo ${fs.length===1? fs[0].name : fs.length+' file'}…`;
+    const before=new Set(state.acts.map(a=>a.id)), withL=new Set(state.acts.filter(a=>a.lesson).map(a=>a.id));
+    await importFiles(fs.map(f=>/\.pdf$/i.test(f.name)? f : new File([f], (f.name||'lezione')+'.pdf', {type:'application/pdf'})));
+    const added=state.acts.filter(a=>a.lesson && (!before.has(a.id) || !withL.has(a.id)));
+    const box=$('#lesson-st'); if(!box) return; box.hidden=false;
+    if(added.length){ box.className='lesson-st ok'; box.innerHTML=`✓ Importata: <b>${esc(added[0].name)}</b> del ${esc(fmtDay(added[0].start))} <button class="primary" data-open="${added[0].id}">Apri</button>`; }
+    else { const last=(state.log.find(x=>/✗|già|non|serve|PDF|report/i.test(x.t))||state.log[0]||{}).t||'Nessuna lezione trovata nel file.'; if(/già/.test(last)){ box.className='lesson-st'; box.textContent='Questa lezione è già nell\'app.'; } else { box.className='lesson-st bad'; box.textContent=last; } } };
   const gg=$('#gpx-go'); if(gg) gg.onclick=()=>{ const v=($('#gpx-link').value||'').trim(), m=v.match(/activities\/(\d+)/)||v.match(/^(\d{6,})$/), msg=$('#gpx-msg');
     if(m){ openStravaWeb('https://www.strava.com/activities/'+m[1]+'/export_gpx'); msg.textContent=' Download avviato: quando finisce tocca "Importa il file scaricato".'; }
     else if(/strava\.app\.link|strava\.com/.test(v)){ openStravaWeb(v); msg.textContent=' Si apre l\'uscita su Strava: copia il nuovo indirizzo (contiene /activities/ e un numero), incollalo qui e tocca di nuovo Scarica GPX.'; }
