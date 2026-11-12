@@ -1320,7 +1320,7 @@ function renderAttivita(){
   const list=(state.filter==='all'? state.acts.filter(a=>state.kind==='all'||kindOf(a)===state.kind) : cycling()).filter(a=>!q || a.name.toLowerCase().includes(q));
   const gmap=new Map(groupRides().map(x=>[x.a.id,x]));
   const months=new Map(); for(const a of list){ const k=new Date(a.start).toLocaleDateString('it-IT',{month:'long',year:'numeric'}); if(!months.has(k)) months.set(k,[]); months.get(k).push(a); }
-  v.innerHTML=`${exampleBanner()}<div class="toolbar" style="justify-content:space-between"><h1>Attività</h1><a class="btn primary" id="add-gpx" href="https://www.strava.com/athlete/training" target="_blank" rel="noopener">+ Aggiungi da Strava</a>
+  v.innerHTML=`${exampleBanner()}<div class="toolbar" style="justify-content:space-between"><h1>Attività</h1><a class="btn primary" id="add-gpx" ${sweb(`https://www.strava.com/athlete/training`)}>+ Aggiungi da Strava</a>
     <div class="toolbar"><input type="search" id="q" placeholder="Cerca per nome" value="${esc(state.q)}" aria-label="Cerca">
     <select id="flt" aria-label="Sport"><option value="ride"${state.filter==='ride'?' selected':''}>Solo bici</option><option value="all"${state.filter==='all'?' selected':''}>Anche altri sport</option></select></div></div>${kindBar()}<div id="cal-wrap">${calendarHTML()}</div>
     ${list.length? [...months].map(([m,arr])=>{ const km=arr.reduce((s,a)=>s+a.distance,0)/1000, g=arr.reduce((s,a)=>s+a.gain,0); return `<div class="list"><h3>${esc(m)} · <span class="num">${nf(km)} km · ${nf(g)} m</span></h3>${arr.map(a=>feedCard(a,gmap)).join('')}</div>`; }).join('') : '<div class="panel empty">Nessuna attività trovata.</div>'}`;
@@ -1369,7 +1369,7 @@ function renderDettaglio(){
     ${has('cad')?'<div class="chart short"><canvas id="ch-cad"></canvas></div>':''}
   </div>
   ${dataPanel(a)}
-  ${a.stravaId && !EMBEDDED? `<div class="toolbar"><a class="btn" href="https://www.strava.com/activities/${a.stravaId}" target="_blank" rel="noopener">Apri su Strava</a><a class="btn" href="https://www.strava.com/activities/${a.stravaId}/export_gpx" target="_blank" rel="noopener">Scarica GPX</a></div>` : ''}
+  ${a.stravaId && !EMBEDDED? `<div class="toolbar"><a class="btn" href="https://www.strava.com/activities/${a.stravaId}" target="_blank" rel="noopener">Apri su Strava</a><a class="btn" ${sweb(`https://www.strava.com/activities/${a.stravaId}/export_gpx`)}>Scarica GPX</a></div>` : ''}
   ${actClimbsHTML(a)}
   ${splitsHTML(a)}
   ${(()=>{ const g=groupRides().find(x=>x.a.id===a.id); return g? `<div class="panel"><h3>Con i tuoi amici</h3>${groupTable(a,g.with)}</div>` : ''; })()}
@@ -1454,11 +1454,11 @@ function renderImporta(){
   </label>
   <div class="panel" id="gpx-panel"><h3>Scarica il GPX da Strava</h3>
     <ol class="steps small">
-      <li><a class="btn" href="https://www.strava.com/athlete/training" target="_blank" rel="noopener">Apri le mie attività su Strava</a><br>Si apre il sito di Strava: tocca l'uscita che vuoi e copia il link dalla barra degli indirizzi (oppure nell'app Strava: Condividi → Copia link).</li>
+      <li><a class="btn" ${sweb(`https://www.strava.com/athlete/training`)}>Apri le mie attività su Strava</a><br>Si apre il sito di Strava in Chrome (se non vedi la lista, dal menu ⋮ di Chrome attiva <b>Sito desktop</b>): tocca l'uscita che vuoi e copia il link dalla barra degli indirizzi (oppure nell'app Strava: Condividi → Copia link).</li>
       <li><span class="gpxrow"><input type="url" id="gpx-link" placeholder="Incolla qui il link dell'uscita" aria-label="Link dell'uscita su Strava"><button class="primary" id="gpx-go">Scarica GPX</button></span><span id="gpx-msg" class="muted"></span></li>
       <li><label class="btn" for="file">Importa il file scaricato</label> lo trovi nella cartella Download.</li>
     </ol>
-    <p class="small muted">Tutte le uscite in un colpo: <a href="https://www.strava.com/athlete/delete_your_account" target="_blank" rel="noopener">richiedi l'archivio a Strava</a> (arriva per email in qualche ora) e importa lo ZIP qui sopra.</p></div>
+    <p class="small muted">Tutte le uscite in un colpo: <a ${sweb(`https://www.strava.com/athlete/delete_your_account`)}>richiedi l'archivio a Strava</a> (arriva per email in qualche ora) e importa lo ZIP qui sopra.</p></div>
   <div class="panel"><h3>Senza Strava: condividi il file</h3>
     <p class="small">${IS_IOS? `Su iPhone: nell'app del ciclocomputer o del GPS scegli <b>Esporta</b> o <b>Condividi</b> il file GPX/FIT e <b>Salva su File</b>. Poi qui sopra tocca il riquadro e scegli il file.` : `Su Android, nell'app del ciclocomputer (BiNavi, Garmin, Wahoo, Bryton…) o di Strava sul computer, scegli <b>Condividi</b> o <b>Esporta</b> il file GPX/FIT dell'uscita e poi <b>Pedalate</b>: l'uscita entra da sola. Se Pedalate non compare, salva il file e sceglilo qui sopra.`}</p>
 </div>
@@ -1482,8 +1482,8 @@ function renderImporta(){
     <p class="small muted">Versione dell'app: ${esc(window.APP_VERSION||'anteprima')}. Gli aggiornamenti arrivano da soli: quando ce n'è uno nuovo compare il pulsante "Aggiorna".</p>
     <div class="toolbar">${state.examples?'':'<button class="danger" id="wipe">Elimina tutte le attività</button>'}<span id="wipec" hidden><span class="small">Sicuro? Non si può annullare. </span><button class="danger" id="wipe-yes">Sì, elimina tutto</button> <button id="wipe-no">Annulla</button></span></div></div>`;
   const gg=$('#gpx-go'); if(gg) gg.onclick=()=>{ const v=($('#gpx-link').value||'').trim(), m=v.match(/activities\/(\d+)/)||v.match(/^(\d{6,})$/), msg=$('#gpx-msg');
-    if(m){ window.open('https://www.strava.com/activities/'+m[1]+'/export_gpx','_blank','noopener'); msg.textContent=' Download avviato: quando finisce tocca "Importa il file scaricato".'; }
-    else if(/strava\.app\.link|strava\.com/.test(v)){ window.open(v,'_blank','noopener'); msg.textContent=' Si apre l\'uscita su Strava: copia il nuovo indirizzo (contiene /activities/ e un numero), incollalo qui e tocca di nuovo Scarica GPX.'; }
+    if(m){ openStravaWeb('https://www.strava.com/activities/'+m[1]+'/export_gpx'); msg.textContent=' Download avviato: quando finisce tocca "Importa il file scaricato".'; }
+    else if(/strava\.app\.link|strava\.com/.test(v)){ openStravaWeb(v); msg.textContent=' Si apre l\'uscita su Strava: copia il nuovo indirizzo (contiene /activities/ e un numero), incollalo qui e tocca di nuovo Scarica GPX.'; }
     else msg.textContent=' Incolla il link di un\'uscita di Strava.'; };
   const inp=$('#file'), drop=$('#drop');
   inp.onchange=()=>{ importFiles([...inp.files]); inp.value=''; };
@@ -1499,6 +1499,11 @@ function renderImporta(){
 const EMBEDDED = (()=>{ try{ return window.self!==window.top; }catch(e){ return true; } })();
 const IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
 const IS_ANDROID = /android/i.test(navigator.userAgent);
+/* link al SITO di Strava: su Android li forzo in Chrome, altrimenti li apre l'app Strava che risponde "link non valido" */
+function swebURL(u){ return IS_ANDROID? 'intent://'+u.replace(/^https?:\/\//,'')+'#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url='+encodeURIComponent(u)+';end' : u; }
+function sweb(u){ return IS_ANDROID? `href="${swebURL(u)}"` : `href="${u}" target="_blank" rel="noopener"`; }
+function openStravaWeb(u){ if(IS_ANDROID) location.href=swebURL(u); else window.open(u,'_blank','noopener'); }
+
 const STANDALONE = (()=>{ try{ return matchMedia('(display-mode: standalone)').matches || navigator.standalone===true; }catch(e){ return false; } })();
 let installEvt=null;
 window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); installEvt=e; const b=$('#install'); if(b) b.hidden=false; });
@@ -2207,7 +2212,7 @@ try{ const mq=matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener('c
 })();
 </script>
 <script>
-window.APP_VERSION='202611120645';
+window.APP_VERSION='202611120647';
 if('serviceWorker' in navigator && location.protocol==='https:'){
   const had=!!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js?v='+APP_VERSION).then(reg=>{
